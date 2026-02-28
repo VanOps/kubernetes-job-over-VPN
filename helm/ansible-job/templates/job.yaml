@@ -1,0 +1,249 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# Kubernetes Job – Ansible Playbook Runner over WireGuard VPN
+#
+# ArgoCD Hook Pattern:
+#   PostSync         → Job runs AFTER ConfigMaps/Secrets/SA/RBAC are synced
+#   BeforeHookCreation → Previous Job deleted before creating new one
+#   sync-wave "1"    → Explicit ordering (wave 0 = infra, wave 1 = job)
+#
+# Pod Architecture (all containers share the same network namespace):
+#   [init] git-sync        → Clones Ansible monorepo into emptyDir volume
+#   [sidecar] vpn-sidecar  → WireGuard wg0 tunnel (stays alive, K8s 1.28+)
+#   [main] ansible-executor → Runs playbook over VPN tunnel
+#
+# Requires Kubernetes ≥ 1.28 for native sidecar (initContainer.restartPolicy: Always)
+# EKS: supported from K8s 1.29 on managed node groups
+# ══════════════════════════════════════════════════════════════════════
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ansible-job.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ansible-job.labels" . | nindent 4 }}
+  annotations:
+    # ── ArgoCD hook configuration ───────────────────────────────────
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "1"
+    # ── Audit metadata ──────────────────────────────────────────────
+    ansible-job/playbook: {{ .Values.ansible.playbook | quote }}
+    ansible-job/inventory: {{ .Values.ansible.inventory | quote }}
+    ansible-job/environment: {{ .Values.environment | quote }}
+    ansible-job/git-branch: {{ .Values.gitSync.branch | quote }}
+    ansible-job/vpn-interface: {{ .Values.vpn.interface | quote }}
+    {{- if .Values.monitoring.prometheusAnnotations }}
+    prometheus.io/scrape: "false"
+    {{- end }}
+spec:
+  completions: {{ .Values.job.completions }}
+  parallelism: {{ .Values.job.parallelism }}
+  backoffLimit: {{ .Values.job.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "ansible-job.selectorLabels" . | nindent 8 }}
+        environment: {{ .Values.environment }}
+        vpn-interface: {{ .Values.vpn.interface }}
+      annotations:
+        # Force pod restart on config changes
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      restartPolicy: {{ .Values.job.restartPolicy }}
+      serviceAccountName: {{ include "ansible-job.serviceAccountName" . }}
+      automountServiceAccountToken: false
+
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.securityContext.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      # ── Required for WireGuard kernel module loading ──────────────
+      hostNetwork: false
+      dnsPolicy: ClusterFirst
+
+      initContainers:
+        # ── Init 1: git-sync (regular init — runs once, then exits) ──
+        # Clones the Ansible monorepo into the shared workspace volume.
+        # Subsequent containers mount /ansible-workspace/{{ .Values.gitSync.subPath }}.
+        {{- if .Values.gitSync.enabled }}
+        - name: git-sync
+          image: "{{ .Values.gitSync.image.repository }}:{{ .Values.gitSync.image.tag }}"
+          imagePullPolicy: {{ .Values.gitSync.image.pullPolicy }}
+          args:
+            - --repo={{ .Values.gitSync.repo }}
+            - --branch={{ .Values.gitSync.branch }}
+            - --depth={{ .Values.gitSync.depth }}
+            - --one-time
+            - --root=/ansible-workspace
+            - --link=current
+            - --period=0s
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65533   # git-sync uses nonroot UID 65533
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: ansible-workspace
+              mountPath: /ansible-workspace
+          resources:
+            {{- toYaml .Values.resources.gitSync | nindent 12 }}
+        {{- end }}
+
+        # ── Init 2: vpn-sidecar (native sidecar — stays running) ─────
+        # restartPolicy: Always makes this a K8s 1.28+ native sidecar.
+        # WireGuard wg0 interface is visible to ALL containers in the Pod
+        # because they share the same network namespace (standard K8s behavior).
+        - name: vpn-sidecar
+          image: "{{ .Values.vpn.image.repository }}:{{ .Values.vpn.image.tag }}"
+          imagePullPolicy: {{ .Values.vpn.image.pullPolicy }}
+          restartPolicy: Always   # Native sidecar: starts before main, stays alive
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: WG_INTERFACE
+              value: {{ .Values.vpn.interface | quote }}
+            - name: MONITOR_INTERVAL
+              value: {{ .Values.vpn.monitorInterval | quote }}
+          securityContext:
+            {{- toYaml .Values.securityContext.vpn | nindent 12 }}
+          volumeMounts:
+            - name: vpn-config
+              mountPath: /etc/wireguard
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources.vpn | nindent 12 }}
+          # Startup probe: ensure WireGuard is up before main container starts
+          startupProbe:
+            exec:
+              command:
+                - /usr/local/bin/healthcheck.sh
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            failureThreshold: 15   # up to 45s to establish VPN
+
+      # ── Main container: Ansible Executor ─────────────────────────────
+      containers:
+        - name: ansible-executor
+          image: "{{ .Values.ansible.image.repository }}:{{ .Values.ansible.image.tag }}"
+          imagePullPolicy: {{ include "ansible-job.imagePullPolicy" . }}
+          args:
+            - {{ .Values.ansible.playbook | quote }}
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: ANSIBLE_INVENTORY
+              value: {{ .Values.ansible.inventory | quote }}
+            - name: ANSIBLE_PLAYBOOK
+              value: {{ .Values.ansible.playbook | quote }}
+            - name: ANSIBLE_VERBOSITY
+              value: {{ .Values.ansible.verbosity | quote }}
+            - name: SKIP_VPN_WAIT
+              value: {{ .Values.ansible.skipVpnWait | quote }}
+            - name: VPN_INTERFACE
+              value: {{ .Values.vpn.interface | quote }}
+            - name: ANSIBLE_CONFIG
+              value: /ansible/ansible.cfg
+            # These are runtime-injected (not baked in the image) to avoid linter warnings
+            - name: ANSIBLE_VAULT_PASSWORD_FILE
+              value: /run/secrets/vault-password
+            - name: ANSIBLE_HOST_KEY_CHECKING
+              value: "False"
+            {{- if .Values.ansible.extraVars }}
+            - name: ANSIBLE_EXTRA_VARS
+              value: {{ .Values.ansible.extraVars | quote }}
+            {{- end }}
+            {{- with .Values.ansible.extraEnvVars }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext.ansible | nindent 12 }}
+          volumeMounts:
+            # Ansible workspace: repo cloned by git-sync
+            - name: ansible-workspace
+              mountPath: /ansible
+              subPath: "current/{{ .Values.gitSync.subPath }}"
+              readOnly: true
+            # ansible.cfg override from ConfigMap
+            - name: ansible-cfg
+              mountPath: /ansible/ansible.cfg
+              subPath: ansible.cfg
+              readOnly: true
+            # Ansible-vault password (K8s Secret → ExternalSecret in prod)
+            - name: vault-secret
+              mountPath: /run/secrets/vault-password
+              subPath: vault-password
+              readOnly: true
+            # SSH private key for connecting to managed hosts
+            - name: ssh-secret
+              mountPath: /run/secrets/ssh-private-key
+              subPath: ssh-private-key
+              readOnly: true
+            # Temp dirs (fact cache, control sockets, logs)
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.resources.ansible | nindent 12 }}
+
+      # ── Volumes ───────────────────────────────────────────────────────
+      volumes:
+        # Shared workspace: git-sync writes here, ansible-executor reads here
+        - name: ansible-workspace
+          emptyDir: {}
+
+        # WireGuard config: K8s Secret (initial) → ExternalSecret (prod)
+        # Secret must have key: wg0.conf
+        - name: vpn-config
+          secret:
+            secretName: {{ .Values.vpn.secretName }}
+            defaultMode: 0600   # WireGuard requires 0600
+
+        # Ansible-vault password
+        # Secret must have key: vault-password
+        - name: vault-secret
+          secret:
+            secretName: {{ .Values.ansible.vaultSecretName }}
+            defaultMode: 0400
+
+        # SSH private key for connecting to managed hosts
+        # Secret must have key: ssh-private-key
+        - name: ssh-secret
+          secret:
+            secretName: {{ .Values.ansible.sshSecretName }}
+            defaultMode: 0400
+
+        # ansible.cfg from ConfigMap
+        - name: ansible-cfg
+          configMap:
+            name: {{ include "ansible-job.fullname" . }}-ansible-cfg
+
+        # Writable temp space (fact cache, control sockets, logs)
+        - name: tmp
+          emptyDir: {}

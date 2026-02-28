@@ -1,0 +1,12 @@
+---
+# Packages to install on all hosts (override per-env in group_vars)
+common_packages:
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - net-tools
+
+# Set to true to run package installation (disable for fast connectivity-only runs)
+update_packages: false

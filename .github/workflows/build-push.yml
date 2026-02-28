@@ -1,0 +1,183 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# Workflow: Build & Push Docker Images
+#
+# Triggers: push to any branch when docker/** files change
+# Output  : Images pushed to GHCR (ghcr.io/OWNER/*)
+#           Image tags updated in helm/ansible-job/values-ENV.yaml
+#           via auto-commit [skip ci] on develop/staging/main
+# ══════════════════════════════════════════════════════════════════════
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "docker/**"
+      - ".github/workflows/build-push.yml"
+  workflow_dispatch:
+    inputs:
+      force-rebuild:
+        description: "Force rebuild all images even if no docker/ changes"
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ── Build VPN Sidecar Image ─────────────────────────────────────────
+  build-vpn:
+    name: Build VPN Sidecar
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      short-sha: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/k8s-vpn-sidecar
+          tags: |
+            type=sha,prefix=,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+
+      - name: Build and push VPN image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/vpn
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=vpn-sidecar
+          cache-to: type=gha,scope=vpn-sidecar,mode=max
+
+  # ── Build Ansible Executor Image ────────────────────────────────────
+  build-ansible:
+    name: Build Ansible Executor
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      short-sha: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/k8s-ansible-executor
+          tags: |
+            type=sha,prefix=,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+
+      - name: Build and push Ansible image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/ansible/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=ansible-executor
+          cache-to: type=gha,scope=ansible-executor,mode=max
+          build-args: |
+            ANSIBLE_CORE_VERSION=2.17.7
+
+  # ── Update Helm values with new image tags ──────────────────────────
+  update-image-tags:
+    name: Update Image Tags in Helm Values
+    needs: [build-vpn, build-ansible]
+    runs-on: ubuntu-latest
+    # Only update values files on branches that map to an environment
+    if: >
+      github.ref_name == 'develop' ||
+      github.ref_name == 'staging' ||
+      github.ref_name == 'main'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Determine values file and registry owner
+        id: env
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
+          case "${{ github.ref_name }}" in
+            develop) VALUES_FILE="helm/ansible-job/values-dev.yaml" ;;
+            staging) VALUES_FILE="helm/ansible-job/values-staging.yaml" ;;
+            main)    VALUES_FILE="helm/ansible-job/values-prod.yaml" ;;
+          esac
+
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "values_file=${VALUES_FILE}" >> $GITHUB_OUTPUT
+          echo "registry_owner=${OWNER}" >> $GITHUB_OUTPUT
+
+      - name: Update image tags
+        run: |
+          SHA="${{ steps.env.outputs.short_sha }}"
+          FILE="${{ steps.env.outputs.values_file }}"
+          OWNER="${{ steps.env.outputs.registry_owner }}"
+
+          yq eval ".vpn.image.tag = \"${SHA}\"" -i "${FILE}"
+          yq eval ".ansible.image.tag = \"${SHA}\"" -i "${FILE}"
+          yq eval ".vpn.image.repository = \"ghcr.io/${OWNER}/k8s-vpn-sidecar\"" -i "${FILE}"
+          yq eval ".ansible.image.repository = \"ghcr.io/${OWNER}/k8s-ansible-executor\"" -i "${FILE}"
+
+          echo "Updated ${FILE} with tag: ${SHA}"
+          cat "${FILE}"
+
+      - name: Commit updated tags
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "ci: update image tags to ${{ steps.env.outputs.short_sha }} [skip ci]"
+          file_pattern: "helm/ansible-job/values-*.yaml"
+          commit_author: "GitHub Actions <actions@github.com>"

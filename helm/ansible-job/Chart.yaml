@@ -1,0 +1,26 @@
+apiVersion: v2
+name: ansible-job
+description: >
+  Kubernetes Job that runs Ansible playbooks through a WireGuard VPN sidecar.
+  Follows GitOps pattern with ArgoCD: Job recreated on every sync via
+  PostSync hooks and BeforeHookCreation delete policy.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+keywords:
+  - ansible
+  - wireguard
+  - vpn
+  - gitops
+  - argocd
+  - kubernetes-job
+
+maintainers:
+  - name: DevOps Team
+
+home: https://github.com/OWNER/kubernetes-job-over-VPN
+sources:
+  - https://github.com/OWNER/kubernetes-job-over-VPN
+
+dependencies: []

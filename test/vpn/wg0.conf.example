@@ -1,0 +1,21 @@
+# ══════════════════════════════════════════════════════════════════════
+# WireGuard Client Config Example
+# Copy to: test/vpn/wg0.conf  (excluded from git via .gitignore)
+# ══════════════════════════════════════════════════════════════════════
+[Interface]
+# Ansible Job client private key (generate: wg genkey)
+PrivateKey = CLIENT_PRIVATE_KEY_BASE64
+# VPN client IP (must be in server AllowedIPs range)
+Address = 10.10.99.2/24
+# DNS (optional – use server IP or internal resolver)
+DNS = 10.10.0.1
+
+[Peer]
+# VPN server public key (from server: wg pubkey < server_private.key)
+PublicKey = SERVER_PUBLIC_KEY_BASE64
+# Server endpoint (public IP or hostname + WireGuard port)
+Endpoint = vpn.example.com:51820
+# Routes through VPN: all target subnets + server management
+AllowedIPs = 10.10.0.0/24, 10.20.0.0/24, 10.30.0.0/24
+# Keep NAT alive
+PersistentKeepalive = 25

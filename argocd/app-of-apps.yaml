@@ -1,0 +1,47 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# ArgoCD App-of-Apps (Bootstrap)
+#
+# Apply this ONCE to bootstrap the entire GitOps pipeline:
+#   kubectl apply -f argocd/app-of-apps.yaml
+#   (or: make argocd-install)
+#
+# This Application points to argocd/apps/ and creates the 3 child
+# Applications (dev, staging, prod) automatically.
+# ══════════════════════════════════════════════════════════════════════
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ansible-gitops
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: ansible-gitops
+    app.kubernetes.io/component: app-of-apps
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    # IMPORTANT: Replace OWNER with your GitHub username/org
+    repoURL: https://github.com/OWNER/kubernetes-job-over-VPN
+    targetRevision: main
+    path: argocd/apps
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false   # argocd namespace already exists
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 2m
+        factor: 2

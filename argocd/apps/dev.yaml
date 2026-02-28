@@ -1,0 +1,65 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# ArgoCD Application – DEV
+#
+# Sync policy : AUTO (prune + selfHeal)
+# Branch      : develop
+# Sync option : Replace=true → immutable Jobs deleted+recreated on sync
+# Job hook    : PostSync + BeforeHookCreation (clean recreation)
+# ══════════════════════════════════════════════════════════════════════
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ansible-job-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: ansible-gitops
+    environment: dev
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    # Slack/Teams notifications (requires ArgoCD Notifications controller)
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: devops-alerts
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: devops-alerts
+spec:
+  project: default
+
+  source:
+    # IMPORTANT: Replace OWNER with your GitHub username/org
+    repoURL: https://github.com/OWNER/kubernetes-job-over-VPN
+    targetRevision: develop
+    path: helm/ansible-job
+    helm:
+      releaseName: ansible-job-dev
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ansible-jobs-dev
+
+  syncPolicy:
+    automated:
+      prune: true       # Delete resources removed from Git
+      selfHeal: true    # Re-sync if cluster state drifts from Git
+    syncOptions:
+      - CreateNamespace=true
+      - Replace=true          # Force replace immutable Job fields on update
+      - ServerSideApply=true  # Better conflict detection
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+        factor: 2
+
+  # Ignore differences that ArgoCD cannot reconcile
+  ignoreDifferences:
+    - group: batch
+      kind: Job
+      jsonPointers:
+        - /spec/selector
+        - /spec/template/metadata/labels/controller-uid
+        - /spec/template/metadata/labels/batch.kubernetes.io/controller-uid

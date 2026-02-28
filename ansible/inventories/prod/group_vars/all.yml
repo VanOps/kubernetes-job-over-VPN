@@ -1,0 +1,17 @@
+---
+environment: prod
+timezone: Europe/Madrid
+
+vpn_subnet: "10.30.0.0/24"
+vpn_interface: wg0
+
+ansible_ssh_private_key_file: /run/secrets/ssh-private-key
+
+app_port: 80
+app_version: "{{ lookup('env', 'APP_VERSION') | default('stable', true) }}"
+
+log_level: warning
+
+# Prod hardening
+ansible_ssh_retries: 3
+task_timeout: 300

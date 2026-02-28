@@ -1,0 +1,17 @@
+---
+- name: "TIMEZONE | Set system timezone"
+  community.general.timezone:
+    name: "{{ timezone }}"
+  when: timezone is defined
+
+- name: "PACKAGES | Ensure required packages are installed"
+  ansible.builtin.package:
+    name: "{{ common_packages }}"
+    state: present
+  when: update_packages | bool
+
+- name: "SYSTEM | Log configuration applied"
+  ansible.builtin.debug:
+    msg: >-
+      common role applied to {{ inventory_hostname }}
+      (env={{ environment }}, tz={{ timezone }})

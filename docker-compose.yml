@@ -1,0 +1,127 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# Docker Compose – Local Development & Testing
+#
+# Simulates the Kubernetes Pod architecture locally:
+#   vpn service     → WireGuard sidecar (NET_ADMIN)
+#   ansible service → shares VPN network namespace (network_mode: service:vpn)
+#
+# Usage:
+#   make dev-up          → build + run test playbook
+#   make dev-down        → stop & remove containers
+#   make dev-shell       → interactive shell in ansible container
+#   make dev-logs        → follow combined logs
+#
+# Prerequisites:
+#   1. Copy test/vpn/wg0.conf.example → test/vpn/wg0.conf (fill real values)
+#   2. Copy test/secrets/vault-password.example → test/secrets/vault-password
+#   3. Place SSH private key → test/secrets/ssh-private-key (chmod 600)
+#   4. Kernel module: sudo modprobe wireguard  (if not auto-loaded)
+# ══════════════════════════════════════════════════════════════════════
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ── WireGuard VPN Sidecar ───────────────────────────────────────────
+  vpn:
+    build:
+      context: ./docker/vpn
+      target: final
+    image: k8s-vpn-sidecar:local
+    container_name: vpn-sidecar
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.disable_ipv6=0
+    environment:
+      - TZ=Europe/Madrid
+      - WG_INTERFACE=wg0
+      # Set SKIP_VPN=true to run without a real WireGuard server (local testing).
+      # Container stays alive in no-op mode; Ansible sets SKIP_VPN_WAIT=true too.
+      - SKIP_VPN=${SKIP_VPN:-false}
+    volumes:
+      - ./test/vpn:/etc/wireguard:ro
+    networks:
+      - vpn-net
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging: *default-logging
+
+  # ── Ansible Executor ────────────────────────────────────────────────
+  # Uses network_mode: service:vpn to share the VPN network namespace.
+  # This mirrors Kubernetes Pod behavior (all containers share one netns).
+  ansible:
+    build:
+      context: .
+      dockerfile: docker/ansible/Dockerfile
+      target: final
+    image: k8s-ansible-executor:local
+    container_name: ansible-executor
+    # Share VPN container's network namespace → wg0 is visible here
+    network_mode: "service:vpn"
+    depends_on:
+      vpn:
+        condition: service_healthy
+    environment:
+      - TZ=Europe/Madrid
+      - ANSIBLE_INVENTORY=${ANSIBLE_INVENTORY:-inventories/dev}
+      - ANSIBLE_PLAYBOOK=${ANSIBLE_PLAYBOOK:-playbooks/test-connectivity.yml}
+      - ANSIBLE_VERBOSITY=${ANSIBLE_VERBOSITY:-2}
+      - SKIP_VPN_WAIT=${SKIP_VPN:-true}
+      - VPN_INTERFACE=wg0
+      # Runtime-only vars (not baked into image to avoid linter warnings)
+      - ANSIBLE_VAULT_PASSWORD_FILE=/run/secrets/vault-password
+      - ANSIBLE_HOST_KEY_CHECKING=False
+    volumes:
+      - ./ansible:/ansible:ro
+      - ./test/secrets:/run/secrets:ro
+    logging: *default-logging
+    profiles:
+      - dev   # Only started with: docker compose --profile dev up
+
+  # ── Local Ansible run (one-shot, exits after playbook) ───────────────
+  ansible-run:
+    build:
+      context: .
+      dockerfile: docker/ansible/Dockerfile
+      target: final
+    image: k8s-ansible-executor:local
+    container_name: ansible-run
+    network_mode: "service:vpn"
+    depends_on:
+      vpn:
+        condition: service_healthy
+    environment:
+      - TZ=Europe/Madrid
+      - ANSIBLE_INVENTORY=${ANSIBLE_INVENTORY:-inventories/dev}
+      - ANSIBLE_PLAYBOOK=${ANSIBLE_PLAYBOOK:-playbooks/test-connectivity.yml}
+      - ANSIBLE_VERBOSITY=${ANSIBLE_VERBOSITY:-2}
+      - SKIP_VPN_WAIT=${SKIP_VPN:-true}
+      - VPN_INTERFACE=wg0
+      - ANSIBLE_VAULT_PASSWORD_FILE=/run/secrets/vault-password
+      - ANSIBLE_HOST_KEY_CHECKING=False
+    volumes:
+      - ./ansible:/ansible:ro
+      - ./test/secrets:/run/secrets:ro
+    restart: no
+    logging: *default-logging
+    profiles:
+      - run   # docker compose --profile run up --abort-on-container-exit
+
+networks:
+  vpn-net:
+    driver: bridge
+    # Subnet auto-assigned by Docker to avoid conflicts with existing networks

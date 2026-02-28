@@ -1,0 +1,206 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# Workflow: ArgoCD Selective Sync
+#
+# Triggers: push to develop/staging/main when helm/ansible/argocd changes
+#           OR manual dispatch (workflow_dispatch) for any environment
+#
+# Gate strategy:
+#   dev     → auto-sync (no approval)
+#   staging → GitHub Environment "staging" (required reviewers)
+#   prod    → GitHub Environment "production" (required reviewers + delay)
+#
+# Secrets required (set in GitHub repo Settings → Secrets):
+#   ARGOCD_SERVER  e.g. "argocd.example.com"
+#   ARGOCD_TOKEN   ArgoCD API token with sync permissions
+# ══════════════════════════════════════════════════════════════════════
+name: ArgoCD Selective Sync
+
+on:
+  push:
+    branches:
+      - develop
+      - staging
+      - main
+    paths:
+      - "helm/**"
+      - "ansible/**"
+      - "argocd/**"
+      - "k8s/**"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      force:
+        description: "Force sync (--force flag)"
+        type: boolean
+        default: false
+
+jobs:
+  # ── Resolve target environment ──────────────────────────────────────
+  resolve-env:
+    name: Resolve Target Environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      argocd-app: ${{ steps.env.outputs.argocd-app }}
+    steps:
+      - name: Resolve
+        id: env
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV="${{ inputs.environment }}"
+          else
+            case "${{ github.ref_name }}" in
+              develop) ENV="dev"     ;;
+              staging) ENV="staging" ;;
+              main)    ENV="prod"    ;;
+              *)       echo "Unsupported branch: ${{ github.ref_name }}"; exit 1 ;;
+            esac
+          fi
+
+          case "${ENV}" in
+            dev)     APP="ansible-job-dev"     ;;
+            staging) APP="ansible-job-staging" ;;
+            prod)    APP="ansible-job-prod"    ;;
+          esac
+
+          echo "environment=${ENV}" >> $GITHUB_OUTPUT
+          echo "argocd-app=${APP}" >> $GITHUB_OUTPUT
+          echo "Resolved: env=${ENV}, app=${APP}"
+
+  # ── DEV: Auto-sync (no approval) ───────────────────────────────────
+  sync-dev:
+    name: "Sync DEV (Auto)"
+    needs: resolve-env
+    if: needs.resolve-env.outputs.environment == 'dev'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Install ArgoCD CLI
+        run: |
+          ARGOCD_VERSION=$(curl -sL https://api.github.com/repos/argoproj/argo-cd/releases/latest \
+            | grep '"tag_name"' | cut -d'"' -f4)
+          curl -sSL -o /usr/local/bin/argocd \
+            "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
+          chmod +x /usr/local/bin/argocd
+          argocd version --client
+
+      - name: Login to ArgoCD
+        run: |
+          argocd login "${{ secrets.ARGOCD_SERVER }}" \
+            --auth-token "${{ secrets.ARGOCD_TOKEN }}" \
+            --grpc-web --insecure
+
+      - name: Sync dev app (selective)
+        run: |
+          FORCE_FLAG=""
+          [[ "${{ inputs.force }}" == "true" ]] && FORCE_FLAG="--force"
+
+          argocd app sync ansible-job-dev \
+            --grpc-web \
+            --timeout 300 \
+            ${FORCE_FLAG}
+
+      - name: Wait for health
+        run: |
+          argocd app wait ansible-job-dev \
+            --health --timeout 300 --grpc-web
+
+      - name: Show sync result
+        if: always()
+        run: |
+          argocd app get ansible-job-dev --grpc-web
+
+  # ── STAGING: Sync with GitHub Environment approval ──────────────────
+  sync-staging:
+    name: "Sync STAGING (Approval Required)"
+    needs: resolve-env
+    if: needs.resolve-env.outputs.environment == 'staging'
+    runs-on: ubuntu-latest
+    environment: staging    # Requires GitHub Environment protection rules
+    steps:
+      - name: Install ArgoCD CLI
+        run: |
+          ARGOCD_VERSION=$(curl -sL https://api.github.com/repos/argoproj/argo-cd/releases/latest \
+            | grep '"tag_name"' | cut -d'"' -f4)
+          curl -sSL -o /usr/local/bin/argocd \
+            "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
+          chmod +x /usr/local/bin/argocd
+
+      - name: Login to ArgoCD
+        run: |
+          argocd login "${{ secrets.ARGOCD_SERVER }}" \
+            --auth-token "${{ secrets.ARGOCD_TOKEN }}" \
+            --grpc-web --insecure
+
+      - name: Show diff before sync
+        run: |
+          argocd app diff ansible-job-staging --grpc-web || true
+
+      - name: Sync staging app
+        run: |
+          argocd app sync ansible-job-staging \
+            --grpc-web --timeout 300
+
+      - name: Wait for health
+        run: |
+          argocd app wait ansible-job-staging \
+            --health --timeout 600 --grpc-web
+
+      - name: Show sync result
+        if: always()
+        run: |
+          argocd app get ansible-job-staging --grpc-web
+
+  # ── PROD: Manual gate with required reviewers ───────────────────────
+  sync-prod:
+    name: "Sync PROD (Manual Gate)"
+    needs: resolve-env
+    if: needs.resolve-env.outputs.environment == 'prod'
+    runs-on: ubuntu-latest
+    environment: production  # Requires GitHub Environment with required reviewers
+    steps:
+      - name: Install ArgoCD CLI
+        run: |
+          ARGOCD_VERSION=$(curl -sL https://api.github.com/repos/argoproj/argo-cd/releases/latest \
+            | grep '"tag_name"' | cut -d'"' -f4)
+          curl -sSL -o /usr/local/bin/argocd \
+            "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
+          chmod +x /usr/local/bin/argocd
+
+      - name: Login to ArgoCD
+        run: |
+          argocd login "${{ secrets.ARGOCD_SERVER }}" \
+            --auth-token "${{ secrets.ARGOCD_TOKEN }}" \
+            --grpc-web --insecure
+
+      - name: Pre-sync diff (audit)
+        run: |
+          echo "=== PRE-SYNC DIFF (ansible-job-prod) ==="
+          argocd app diff ansible-job-prod --grpc-web || true
+          echo "========================================="
+
+      - name: Sync prod app
+        run: |
+          argocd app sync ansible-job-prod \
+            --grpc-web --timeout 600
+
+      - name: Wait for health
+        run: |
+          argocd app wait ansible-job-prod \
+            --health --timeout 900 --grpc-web
+
+      - name: Post-sync audit log
+        if: always()
+        run: |
+          echo "=== SYNC HISTORY (last 5) ==="
+          argocd app history ansible-job-prod --grpc-web | head -6
+          echo "=== APP STATUS ==="
+          argocd app get ansible-job-prod --grpc-web

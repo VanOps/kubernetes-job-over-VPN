@@ -1,0 +1,39 @@
+---
+# ConfigMap: environment-specific ansible.cfg override
+# The actual playbooks/inventories are cloned via git-sync init container.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ansible-job.fullname" . }}-ansible-cfg
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ansible-job.labels" . | nindent 4 }}
+data:
+  ansible.cfg: |
+    [defaults]
+    inventory              = {{ .Values.ansible.inventory }}
+    interpreter_python     = auto_silent
+    stdout_callback        = yaml
+    callbacks_enabled      = profile_tasks, timer
+    display_skipped_hosts  = false
+    forks                  = 10
+    pipelining             = true
+    gathering              = smart
+    fact_caching           = jsonfile
+    fact_caching_connection = /tmp/ansible-facts
+    fact_caching_timeout   = 86400
+    remote_user            = ansible
+    timeout                = 30
+    vault_password_file    = /run/secrets/vault-password
+    log_path               = /tmp/ansible.log
+    retry_files_enabled    = false
+    deprecation_warnings   = false
+
+    [ssh_connection]
+    ssh_args               = -C -o ControlMaster=auto -o ControlPersist=60s -o StrictHostKeyChecking=no
+    control_path_dir       = /tmp/ansible-cp
+    pipelining             = true
+
+    [persistent_connection]
+    connect_timeout        = 30
+    command_timeout        = 30

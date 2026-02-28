@@ -1,0 +1,65 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# ArgoCD Application – STAGING
+#
+# Sync policy : AUTO (prune: false, selfHeal: false)
+#               → auto-detects drift but requires human/CI trigger to sync
+# Branch      : staging
+# Approval    : GitHub Actions `environment: staging` protection rules
+#               provide the approval gate before triggering sync
+# ══════════════════════════════════════════════════════════════════════
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ansible-job-staging
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: ansible-gitops
+    environment: staging
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-running.slack: devops-staging
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: devops-alerts
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: devops-staging
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: devops-alerts
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/OWNER/kubernetes-job-over-VPN
+    targetRevision: staging
+    path: helm/ansible-job
+    helm:
+      releaseName: ansible-job-staging
+      valueFiles:
+        - values.yaml
+        - values-staging.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ansible-jobs-staging
+
+  syncPolicy:
+    automated:
+      prune: false       # Do NOT auto-prune – require explicit approval
+      selfHeal: false    # Detect drift but wait for CI/human to act
+    syncOptions:
+      - CreateNamespace=true
+      - Replace=true
+      - ServerSideApply=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        maxDuration: 5m
+        factor: 2
+
+  ignoreDifferences:
+    - group: batch
+      kind: Job
+      jsonPointers:
+        - /spec/selector
+        - /spec/template/metadata/labels/controller-uid
+        - /spec/template/metadata/labels/batch.kubernetes.io/controller-uid

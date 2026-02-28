@@ -1,0 +1,21 @@
+---
+# ── Dev environment variables ────────────────────────────────────────────
+environment: dev
+timezone: Europe/Madrid
+
+# VPN
+vpn_subnet: "10.10.0.0/24"
+vpn_interface: wg0
+
+# SSH key (mounted at runtime as K8s Secret)
+ansible_ssh_private_key_file: /run/secrets/ssh-private-key
+
+# App config
+app_port: 8080
+app_version: "{{ lookup('env', 'APP_VERSION') | default('latest', true) }}"
+
+# Logging
+log_level: debug
+
+# Vault vars loaded from ansible/vault/secrets.yml (ansible-vault encrypted)
+# Usage: "{{ vault_db_password }}"  — vault prefix is conventional, not enforced

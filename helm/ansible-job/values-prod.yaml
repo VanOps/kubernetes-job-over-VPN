@@ -1,0 +1,39 @@
+# ── Production environment overrides ─────────────────────────────────
+# Branch: main | Sync: MANUAL ONLY | Audit trail: 24h pod retention
+environment: prod
+
+vpn:
+  image:
+    tag: "latest"   # CI updates on main branch push; human approves the sync
+  secretName: vpn-wireguard-config
+
+ansible:
+  image:
+    tag: "latest"
+  playbook: playbooks/site.yml
+  inventory: inventories/prod
+  verbosity: 0     # quiet in prod – logs only errors
+  extraEnvVars:
+    - name: APP_VERSION
+      value: "stable"
+
+gitSync:
+  branch: main
+
+job:
+  ttlSecondsAfterFinished: 86400   # 24h – retain completed pods for audit trail
+  backoffLimit: 1                  # fail fast in prod
+  activeDeadlineSeconds: 3600      # 1h max
+
+serviceAccount:
+  annotations: {}
+  # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/ansible-executor-prod
+
+resources:
+  ansible:
+    requests:
+      cpu: 300m
+      memory: 384Mi
+    limits:
+      cpu: 1000m
+      memory: 768Mi

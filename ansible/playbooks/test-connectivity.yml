@@ -1,0 +1,64 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# Test Playbook: VPN Connectivity & Host Reachability Validation
+#
+# Purpose : Validate WireGuard tunnel + SSH access + basic system info.
+#           Safe to run in any environment without changes.
+# Run     : ansible-playbook -i inventories/dev playbooks/test-connectivity.yml
+# ══════════════════════════════════════════════════════════════════════
+- name: Test VPN Connectivity and Host Reachability
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: "PING | Basic Ansible connectivity check"
+      ansible.builtin.ping:
+
+    - name: "FACTS | Display system information"
+      ansible.builtin.debug:
+        msg:
+          - "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          - "  Host        : {{ ansible_hostname }}"
+          - "  FQDN        : {{ ansible_fqdn }}"
+          - "  OS          : {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "  Kernel      : {{ ansible_kernel }}"
+          - "  Arch        : {{ ansible_architecture }}"
+          - "  Python      : {{ ansible_python_version }}"
+          - "  Uptime (s)  : {{ ansible_uptime_seconds }}"
+          - "  Environment : {{ environment | default('unknown') }}"
+          - "  Timestamp   : {{ lookup('pipe', 'TZ=Europe/Madrid date +\"%Y-%m-%d %H:%M:%S %Z\"') }}"
+          - "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    - name: "NETWORK | Show all IPv4 addresses"
+      ansible.builtin.debug:
+        msg: "IPs: {{ ansible_all_ipv4_addresses | join(', ') }}"
+
+    - name: "NETWORK | Check VPN subnet route"
+      ansible.builtin.command:
+        cmd: "ip route show {{ vpn_subnet | default('10.0.0.0/8') }}"
+      register: vpn_route
+      changed_when: false
+      ignore_errors: true
+
+    - name: "NETWORK | Display VPN route"
+      ansible.builtin.debug:
+        msg: "VPN route ({{ vpn_subnet | default('10.0.0.0/8') }}): {{ vpn_route.stdout | default('NOT FOUND') }}"
+
+    - name: "DISK | Check available disk space"
+      ansible.builtin.command:
+        cmd: df -h /
+      register: disk_info
+      changed_when: false
+
+    - name: "DISK | Display disk info"
+      ansible.builtin.debug:
+        msg: "{{ disk_info.stdout_lines }}"
+
+    - name: "SUMMARY | Connectivity test completed"
+      ansible.builtin.debug:
+        msg:
+          - "╔══════════════════════════════════════════╗"
+          - "  ✓  Connectivity test PASSED"
+          - "  Host : {{ ansible_hostname }}"
+          - "  Env  : {{ environment | default('unknown') }}"
+          - "╚══════════════════════════════════════════╝"

@@ -1,0 +1,30 @@
+# ── Staging environment overrides ────────────────────────────────────
+# Branch: staging | Auto-sync: true (selfHeal: false) | Approval hooks
+environment: staging
+
+vpn:
+  image:
+    tag: "latest"   # CI updates on staging branch push
+  secretName: vpn-wireguard-config
+
+ansible:
+  image:
+    tag: "latest"
+  playbook: playbooks/site.yml
+  inventory: inventories/staging
+  verbosity: 1
+  extraEnvVars:
+    - name: APP_VERSION
+      value: "staging-candidate"
+
+gitSync:
+  branch: staging
+
+job:
+  ttlSecondsAfterFinished: 7200    # 2h – keep pods for staging log inspection
+  backoffLimit: 2
+  activeDeadlineSeconds: 1800      # 30min
+
+serviceAccount:
+  annotations: {}
+  # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/ansible-executor-staging
