@@ -1,8 +1,8 @@
 # AI Content Disclosure (EU AI Act Art.50)
 
-**Last Updated**: 2026-02-28T10:51:08Z
-**Commit**: 946431fbed48581a144326bbac46ae0c3747d812
-**Workflow Run**: 22519292605
+**Last Updated**: 2026-02-28T11:01:00Z
+**Commit**: 20682810236ce4632c27d1f39eaf192c6a5ade46
+**Workflow Run**: 22519437652
 
 ## Purpose
 This repository uses AI-assisted code generation for development and maintenance tasks.
@@ -12,9 +12,15 @@ transparency in AI-generated content.
 ## Recent Changes (Last Commit)
 ### Modified files with potential AI assistance:
 
-**Commit Message**: initial commit
-
-- .github/workflows/ci-ai-compliance.yaml
+- .github/workflows/build-push.yml
+- DEVELOPER.md
+- README.md
+- argocd/app-of-apps.yaml
+- argocd/apps/dev.yaml
+- argocd/apps/prod.yaml
+- argocd/apps/staging.yaml
+- helm/ansible-job/Chart.yaml
+- helm/ansible-job/values.yaml
 
 ## Repository Overview
 
@@ -22,7 +28,7 @@ transparency in AI-generated content.
 - `.yaml` files: 19
 - `.yml` files: 11
 - `.sh` files: 4
-- `.md` files: 2
+- `.md` files: 3
 - `.tpl` files: 1
 - `.cfg` files: 1
 - `.ini` files: 3
