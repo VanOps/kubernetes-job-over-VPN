@@ -1,8 +1,15 @@
 # AI Content Disclosure (EU AI Act Art.50)
 
+<<<<<<< HEAD
 **Last Updated**: 2026-02-28T10:46:52Z
 **Commit**: 82c0cb5c5e85675bd2d6182c2d77bd4e4f132c42
 **Workflow Run**: 22519230014
+=======
+**Last Updated**: 2026-02-28T11:01:00Z
+**Commit**: 20682810236ce4632c27d1f39eaf192c6a5ade46
+**Workflow Run**: 22519437652
+
+> > > > > > > 86d44de (docs: Update AI disclosure [skip ci])
 
 ## Purpose
 
@@ -18,6 +25,15 @@ transparency in AI-generated content.
 
 - .github/workflows/ai-disclosure.yaml
 - .github/workflows/ci-ai-compliance.yaml
+- .github/workflows/build-push.yml
+- DEVELOPER.md
+- README.md
+- argocd/app-of-apps.yaml
+- argocd/apps/dev.yaml
+- argocd/apps/prod.yaml
+- argocd/apps/staging.yaml
+- helm/ansible-job/Chart.yaml
+- helm/ansible-job/values.yaml
 
 ## Repository Overview
 
@@ -26,7 +42,7 @@ transparency in AI-generated content.
 - `.yaml` files: 19
 - `.yml` files: 11
 - `.sh` files: 4
-- `.md` files: 2
+- `.md` files: 3
 - `.tpl` files: 1
 - `.cfg` files: 1
 - `.ini` files: 3
