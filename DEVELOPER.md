@@ -23,15 +23,15 @@ Guía de referencia para contribuir y trabajar con el proyecto localmente. Para 
 
 ### Herramientas requeridas
 
-| Herramienta | Versión mínima | Uso |
-|-------------|---------------|-----|
-| Docker      | 24+           | Build + dev local |
-| docker compose | v2 (plugin) | Simular Pod K8s localmente |
-| helm        | 3.14+         | Lint y render de templates |
-| kubectl     | 1.28+         | Interacción con cluster |
-| yq          | 4+            | Actualizar tags en values files |
-| argocd CLI  | 2.10+         | Sync y diff contra cluster |
-| ansible     | ansible-core 2.17+ | vault-edit local (opcional) |
+| Herramienta    | Versión mínima     | Uso                             |
+| -------------- | ------------------ | ------------------------------- |
+| Docker         | 24+                | Build + dev local               |
+| docker compose | v2 (plugin)        | Simular Pod K8s localmente      |
+| helm           | 3.14+              | Lint y render de templates      |
+| kubectl        | 1.28+              | Interacción con cluster         |
+| yq             | 4+                 | Actualizar tags en values files |
+| argocd CLI     | 2.10+              | Sync y diff contra cluster      |
+| ansible        | ansible-core 2.17+ | vault-edit local (opcional)     |
 
 ```bash
 # macOS
@@ -167,10 +167,10 @@ ANSIBLE_VERBOSITY=4 make dev-up
 
 ### Perfiles Docker Compose
 
-| Perfil | Servicio | Uso |
-|--------|---------|-----|
-| `dev`  | `vpn` + `ansible` (restart: unless-stopped) | Desarrollo interactivo |
-| `run`  | `vpn` + `ansible-run` (restart: no) | One-shot, reproduce comportamiento K8s Job |
+| Perfil | Servicio                                    | Uso                                        |
+| ------ | ------------------------------------------- | ------------------------------------------ |
+| `dev`  | `vpn` + `ansible` (restart: unless-stopped) | Desarrollo interactivo                     |
+| `run`  | `vpn` + `ansible-run` (restart: no)         | One-shot, reproduce comportamiento K8s Job |
 
 ```bash
 # One-shot (más parecido al Job K8s):
@@ -224,7 +224,7 @@ ansible/
 collections:
   - name: community.general
     version: ">=9.0"
-  - name: mi.coleccion        # nueva
+  - name: mi.coleccion # nueva
     version: "1.2.3"
 ```
 
@@ -272,12 +272,12 @@ job:
 
 vpn:
   image:
-    repository: ghcr.io/OWNER/k8s-vpn-sidecar
-    tag: latest          # ← CI actualiza este campo vía yq
+    repository: ghcr.io/VanOps/k8s-vpn-sidecar
+    tag: latest # ← CI actualiza este campo vía yq
 
 ansible:
   image:
-    repository: ghcr.io/OWNER/k8s-ansible-executor
+    repository: ghcr.io/VanOps/k8s-ansible-executor
     tag: latest
   playbook: playbooks/test-connectivity.yml
 ```
@@ -285,7 +285,7 @@ ansible:
 ```yaml
 # values-prod.yaml — solo overrides de prod
 job:
-  ttlSecondsAfterFinished: 86400   # 24h audit trail
+  ttlSecondsAfterFinished: 86400 # 24h audit trail
 ansible:
   inventory: inventories/prod
   playbook: playbooks/site.yml
@@ -460,14 +460,14 @@ make argocd-diff-dev
 
 ### Seguridad — qué NO commitear
 
-| Fichero | Motivo |
-|---------|--------|
-| `test/vpn/wg0.conf` | Claves WireGuard reales |
-| `test/secrets/vault-password` | Contraseña vault |
-| `test/secrets/ssh-private-key` | Clave SSH privada |
-| `ansible/vault/secrets.yml` (sin cifrar) | Secretos Ansible |
-| `.argocd-token` | Token ArgoCD |
-| `helm/ansible-job/values-local.yaml` | Posibles overrides con secretos |
+| Fichero                                  | Motivo                          |
+| ---------------------------------------- | ------------------------------- |
+| `test/vpn/wg0.conf`                      | Claves WireGuard reales         |
+| `test/secrets/vault-password`            | Contraseña vault                |
+| `test/secrets/ssh-private-key`           | Clave SSH privada               |
+| `ansible/vault/secrets.yml` (sin cifrar) | Secretos Ansible                |
+| `.argocd-token`                          | Token ArgoCD                    |
+| `helm/ansible-job/values-local.yaml`     | Posibles overrides con secretos |
 
 El `.gitignore` ya cubre todos estos casos. Revisar `git status` antes de cada commit.
 
@@ -494,11 +494,11 @@ Se dispara cuando cambia `docker/**` en cualquier push. Hace:
 
 Se dispara cuando cambia `helm/**` o `ansible/**`:
 
-| Rama | Entorno | Gate |
-|------|---------|------|
-| `develop` | dev | Sin aprobación |
-| `staging` | staging | GH Environment `staging` — 1 revisor |
-| `main` | prod | GH Environment `production` — 2 revisores + 5 min delay |
+| Rama      | Entorno | Gate                                                    |
+| --------- | ------- | ------------------------------------------------------- |
+| `develop` | dev     | Sin aprobación                                          |
+| `staging` | staging | GH Environment `staging` — 1 revisor                    |
+| `main`    | prod    | GH Environment `production` — 2 revisores + 5 min delay |
 
 ### Añadir un check al CI local
 
@@ -511,10 +511,10 @@ ci: helm-lint mi-nuevo-check
 
 ### Credenciales necesarias en GitHub
 
-| Secret/Variable | Scope | Uso |
-|----------------|-------|-----|
-| `GITHUB_TOKEN` | Automático | Push a GHCR, auto-commit tags |
-| `ARGOCD_SERVER` | Environment secret | URL del servidor ArgoCD |
-| `ARGOCD_TOKEN` | Environment secret | Auth argocd CLI |
+| Secret/Variable | Scope              | Uso                           |
+| --------------- | ------------------ | ----------------------------- |
+| `GITHUB_TOKEN`  | Automático         | Push a GHCR, auto-commit tags |
+| `ARGOCD_SERVER` | Environment secret | URL del servidor ArgoCD       |
+| `ARGOCD_TOKEN`  | Environment secret | Auth argocd CLI               |
 
 Configurar en: **GitHub → Settings → Environments → `dev`/`staging`/`production`**

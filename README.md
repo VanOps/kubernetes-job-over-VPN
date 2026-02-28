@@ -13,7 +13,7 @@ flowchart TD
     DEV[👨‍💻 Developer\ngit push] -->|trigger| GH[(GitHub\nmonorepo)]
 
     GH -->|docker/** changed| GHA_BUILD[GH Actions\nbuild-push.yml]
-    GHA_BUILD -->|build multi-arch| GHCR[(GHCR\nghcr.io/OWNER/*)]
+    GHA_BUILD -->|build multi-arch| GHCR[(GHCR\nghcr.io/VanOps/*)]
     GHA_BUILD -->|commit image tags\nskip ci| VALUES[values-ENV.yaml\nupdated in repo]
 
     GH -->|helm/** ansible/** changed| GHA_SYNC[GH Actions\nargocd-sync.yml]
@@ -244,13 +244,12 @@ docker run --rm k8s-ansible-executor:local ansible-galaxy collection list
 
 ### 3. Testing local (sin Kubernetes)
 
-
 El VPN sidecar tiene **modo no-op automático** que permite probar la pipeline sin un servidor WireGuard real. El entrypoint detecta tres condiciones y entra en modo sleep (container sano, sin túnel) en lugar de fallar:
 
-| Condición | Comportamiento |
-|-----------|---------------|
-| `SKIP_VPN=true` | No-op explícito |
-| `wg0.conf` no existe | No-op con aviso |
+| Condición                                                         | Comportamiento  |
+| ----------------------------------------------------------------- | --------------- |
+| `SKIP_VPN=true`                                                   | No-op explícito |
+| `wg0.conf` no existe                                              | No-op con aviso |
 | `wg0.conf` tiene placeholders (`CLIENT_PRIVATE_KEY_BASE64`, etc.) | No-op con aviso |
 
 El healthcheck usa `/tmp/vpn-ready` (fichero creado por el entrypoint) en lugar de comprobar la interfaz `wg0`, por lo que pasa correctamente en modo no-op.
@@ -268,6 +267,7 @@ make dev-up      # VPN sidecar en no-op, Ansible intenta conectar al inventario 
 ```
 
 O de forma explícita:
+
 ```bash
 SKIP_VPN=true make dev-up
 ```
@@ -301,7 +301,7 @@ make dev-down          # parar y limpiar
 
 ```bash
 # Reemplazar OWNER con tu GitHub user/org
-sed -i 's/OWNER/tu-github-user/g' \
+sed -i 's/VanOps/tu-github-user/g' \
   argocd/app-of-apps.yaml argocd/apps/*.yaml \
   helm/ansible-job/values.yaml helm/ansible-job/values-*.yaml
 
@@ -377,17 +377,17 @@ Secrets por environment: `ARGOCD_SERVER`, `ARGOCD_TOKEN`
 
 ## Requisitos técnicos
 
-| Componente                | Versión                  |
-| ------------------------- | ------------------------ |
-| Kubernetes                | ≥ 1.28 (native sidecars) |
-| EKS                       | ≥ 1.29                   |
-| Helm                      | ≥ 3.14                   |
-| ArgoCD                    | ≥ 2.10                   |
-| External Secrets Operator | ≥ 0.9                    |
-| ansible-core              | 2.17.7                   |
+| Componente                | Versión                                     |
+| ------------------------- | ------------------------------------------- |
+| Kubernetes                | ≥ 1.28 (native sidecars)                    |
+| EKS                       | ≥ 1.29                                      |
+| Helm                      | ≥ 3.14                                      |
+| ArgoCD                    | ≥ 2.10                                      |
+| External Secrets Operator | ≥ 0.9                                       |
+| ansible-core              | 2.17.7                                      |
 | community.general         | ≥ 9.0 (callback yaml, profile_tasks, timer) |
-| ansible.posix             | ≥ 1.5 (módulos SSH/POSIX) |
-| WireGuard (kernel)        | ≥ 5.6 (built-in)         |
+| ansible.posix             | ≥ 1.5 (módulos SSH/POSIX)                   |
+| WireGuard (kernel)        | ≥ 5.6 (built-in)                            |
 
 ---
 

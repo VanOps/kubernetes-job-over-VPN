@@ -28,7 +28,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/OWNER/kubernetes-job-over-VPN
+    repoURL: https://github.com/VanOps/kubernetes-job-over-VPN
     targetRevision: main
     path: helm/ansible-job
     helm:
@@ -49,7 +49,7 @@ spec:
       - ServerSideApply=true
       - ApplyOutOfSyncOnly=true
     retry:
-      limit: 1          # Fail fast in prod — do not retry blindly
+      limit: 1 # Fail fast in prod — do not retry blindly
       backoff:
         duration: 30s
         maxDuration: 1m
