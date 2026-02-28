@@ -2,7 +2,7 @@ name: ai disclosure update
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - "**.yaml"
       - "**.yml"
