@@ -2,9 +2,9 @@ name: AI Compliance Scan
 
 on:
   push:
-    branches: [main, staging, initial-commit]
+    branches: [main, develop, feature/**]
   pull_request:
-    branches: [main, staging]
+    branches: [main, develop]
 
 permissions:
   contents: read
