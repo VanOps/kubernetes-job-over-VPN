@@ -19,8 +19,8 @@ keywords:
 maintainers:
   - name: DevOps Team
 
-home: https://github.com/OWNER/kubernetes-job-over-VPN
+home: https://github.com/VanOps/kubernetes-job-over-VPN
 sources:
-  - https://github.com/OWNER/kubernetes-job-over-VPN
+  - https://github.com/VanOps/kubernetes-job-over-VPN
 
 dependencies: []

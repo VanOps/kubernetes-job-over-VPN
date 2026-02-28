@@ -12,32 +12,32 @@ environment: dev
 # ── Container Registry ────────────────────────────────────────────────
 # OWNER is replaced by CI with the actual GitHub org/user
 registry: ghcr.io
-registryOwner: OWNER   # replaced by CI: github.repository_owner
+registryOwner: OWNER # replaced by CI: github.repository_owner
 
 # ── VPN Sidecar (WireGuard) ───────────────────────────────────────────
 vpn:
   image:
-    repository: ghcr.io/OWNER/k8s-vpn-sidecar
-    tag: "latest"           # updated by CI to git SHA on each push
+    repository: ghcr.io/VanOps/k8s-vpn-sidecar
+    tag: "latest" # updated by CI to git SHA on each push
     pullPolicy: IfNotPresent
   interface: wg0
   # Name of the K8s Secret containing 'wg0.conf'
   # Initial testing: create manually with kubectl
   # Production:      synced by ExternalSecrets from AWS Secrets Manager
   secretName: vpn-wireguard-config
-  monitorInterval: "10"     # seconds between interface health checks
+  monitorInterval: "10" # seconds between interface health checks
 
 # ── Ansible Executor ──────────────────────────────────────────────────
 ansible:
   image:
-    repository: ghcr.io/OWNER/k8s-ansible-executor
-    tag: "latest"           # updated by CI
+    repository: ghcr.io/VanOps/k8s-ansible-executor
+    tag: "latest" # updated by CI
     pullPolicy: IfNotPresent
   # Relative paths inside the cloned repo
   playbook: playbooks/test-connectivity.yml
   inventory: inventories/dev
   extraVars: ""
-  verbosity: 0              # 0-4 (0=quiet, 4=connection debug)
+  verbosity: 0 # 0-4 (0=quiet, 4=connection debug)
   skipVpnWait: "false"
   # Name of K8s Secret with key 'vault-password'
   vaultSecretName: ansible-vault-password
@@ -54,8 +54,8 @@ gitSync:
     repository: registry.k8s.io/git-sync/git-sync
     tag: "v4.3.0"
     pullPolicy: IfNotPresent
-  repo: https://github.com/OWNER/kubernetes-job-over-VPN
-  branch: develop           # overridden per-env
+  repo: https://github.com/VanOps/kubernetes-job-over-VPN
+  branch: develop # overridden per-env
   depth: 1
   # Sub-path within the repo to expose as /ansible
   subPath: ansible
@@ -68,9 +68,9 @@ job:
   # - Runs AFTER ConfigMaps, Secrets, SA, RBAC are synced
   # - BeforeHookCreation deletes the previous Job before creating a new one
   # → Zero-downtime recreation guaranteed
-  ttlSecondsAfterFinished: 3600   # 1h; 86400 for prod audit
+  ttlSecondsAfterFinished: 3600 # 1h; 86400 for prod audit
   backoffLimit: 2
-  activeDeadlineSeconds: 1800     # 30min max; 3600 for prod
+  activeDeadlineSeconds: 1800 # 30min max; 3600 for prod
   completions: 1
   parallelism: 1
   # restartPolicy must be Never for Jobs
@@ -111,7 +111,7 @@ resources:
 # ── Security Contexts ─────────────────────────────────────────────────
 securityContext:
   pod:
-    runAsNonRoot: false    # VPN sidecar needs NET_ADMIN (may need root-adjacent)
+    runAsNonRoot: false # VPN sidecar needs NET_ADMIN (may need root-adjacent)
     seccompProfile:
       type: RuntimeDefault
   vpn:

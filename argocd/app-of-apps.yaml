@@ -24,7 +24,7 @@ spec:
 
   source:
     # IMPORTANT: Replace OWNER with your GitHub username/org
-    repoURL: https://github.com/OWNER/kubernetes-job-over-VPN
+    repoURL: https://github.com/VanOps/kubernetes-job-over-VPN
     targetRevision: main
     path: argocd/apps
 
@@ -37,7 +37,7 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=false   # argocd namespace already exists
+      - CreateNamespace=false # argocd namespace already exists
       - ServerSideApply=true
     retry:
       limit: 5

@@ -3,7 +3,7 @@
 # Workflow: Build & Push Docker Images
 #
 # Triggers: push to any branch when docker/** files change
-# Output  : Images pushed to GHCR (ghcr.io/OWNER/*)
+# Output  : Images pushed to GHCR (ghcr.io/VanOps/*)
 #           Image tags updated in helm/ansible-job/values-ENV.yaml
 #           via auto-commit [skip ci] on develop/staging/main
 # ══════════════════════════════════════════════════════════════════════

@@ -27,7 +27,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/OWNER/kubernetes-job-over-VPN
+    repoURL: https://github.com/VanOps/kubernetes-job-over-VPN
     targetRevision: staging
     path: helm/ansible-job
     helm:
@@ -42,8 +42,8 @@ spec:
 
   syncPolicy:
     automated:
-      prune: false       # Do NOT auto-prune – require explicit approval
-      selfHeal: false    # Detect drift but wait for CI/human to act
+      prune: false # Do NOT auto-prune – require explicit approval
+      selfHeal: false # Detect drift but wait for CI/human to act
     syncOptions:
       - CreateNamespace=true
       - Replace=true

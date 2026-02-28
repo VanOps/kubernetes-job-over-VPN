@@ -26,7 +26,7 @@ spec:
 
   source:
     # IMPORTANT: Replace OWNER with your GitHub username/org
-    repoURL: https://github.com/OWNER/kubernetes-job-over-VPN
+    repoURL: https://github.com/VanOps/kubernetes-job-over-VPN
     targetRevision: develop
     path: helm/ansible-job
     helm:
@@ -41,12 +41,12 @@ spec:
 
   syncPolicy:
     automated:
-      prune: true       # Delete resources removed from Git
-      selfHeal: true    # Re-sync if cluster state drifts from Git
+      prune: true # Delete resources removed from Git
+      selfHeal: true # Re-sync if cluster state drifts from Git
     syncOptions:
       - CreateNamespace=true
-      - Replace=true          # Force replace immutable Job fields on update
-      - ServerSideApply=true  # Better conflict detection
+      - Replace=true # Force replace immutable Job fields on update
+      - ServerSideApply=true # Better conflict detection
       - ApplyOutOfSyncOnly=true
     retry:
       limit: 5
