@@ -391,6 +391,66 @@ Secrets por environment: `ARGOCD_SERVER`, `ARGOCD_TOKEN`
 
 ---
 
+## 📚 Módulo Educativo: SSH + Ansible + VPN
+
+Este repositorio incluye un **módulo educativo completo** sobre Ansible + SSH + VPN tunnels con labs ejecutables.
+
+### Contenido
+
+📖 [**docs/ssh/**](docs/ssh/README.md) — Módulo educativo completo con 5 documentos:
+
+1. **[01-ansible-ssh-principles.md](docs/ssh/01-ansible-ssh-principles.md)** — Fundamentos SSH en Ansible
+   - known_hosts, StrictHostKeyChecking, ProxyJump
+   - Configuración ansible.cfg y ssh_config
+   - Diagrama flujo conexión SSH completo
+   - Troubleshooting común (7+ problemas)
+
+2. **[02-docker-ansible-lab.md](docs/ssh/02-docker-ansible-lab.md)** — Lab Docker Compose ejecutable
+   - Entorno multi-host: ansible-control + bastion + targets
+   - ProxyJump en acción
+   - Comandos `make lab1-*` ready-to-use
+   - 4 ejercicios prácticos
+
+3. **[03-ssh-vpn-basics.md](docs/ssh/03-ssh-vpn-basics.md)** — SSH sobre túneles VPN
+   - Comparación WireGuard vs OpenVPN (2026)
+   - Configs completos cliente/servidor
+   - SSH tunneling (local/remote/dynamic)
+   - Debian networking: routing, DNS, iptables
+
+4. **[04-vpn-tunnel-lab.md](docs/ssh/04-vpn-tunnel-lab.md)** — Lab VPN avanzado
+   - Simula arquitectura K8s con VPN sidecar
+   - WireGuard server/client + Ansible executor
+   - `network_mode: service:vpn-client` (shared netns)
+   - Comandos `make lab2-*` + 3 ejercicios avanzados
+
+5. **[05-ssh-params-reference.md](docs/ssh/05-ssh-params-reference.md)** — Referencia completa
+   - 30+ tablas parámetros SSH
+   - ExternalSecrets integration (Vault → K8s)
+   - Valores recomendados producción 2026
+   - Debian 12 troubleshooting específico
+
+### Quick Start Labs
+
+```bash
+# Lab 1: SSH Multi-Host básico
+make lab1-setup && make lab1-up && make lab1-test
+
+# Lab 2: VPN Tunnel + Ansible avanzado (simula K8s)
+make lab2-setup && make lab2-up && make lab2-ansible
+```
+
+**Incluye**:
+
+- ✅ 5 diagramas Mermaid (arquitectura + secuencias)
+- ✅ 2 labs ejecutables con Docker Compose
+- ✅ Scripts automation (generate-keys, test-connectivity)
+- ✅ Configs production-ready 2026
+- ✅ 7+ ejercicios prácticos
+
+Ver [**docs/ssh/README.md**](docs/ssh/README.md) para documentación completa.
+
+---
+
 ## Seguridad
 
 - `test/vpn/wg0.conf`, `test/secrets/vault-password`, `test/secrets/ssh-private-key` están en `.gitignore`

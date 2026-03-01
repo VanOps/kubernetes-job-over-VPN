@@ -1,8 +1,8 @@
 # AI Content Disclosure (EU AI Act Art.50)
 
-**Last Updated**: 2026-03-01T06:39:01Z
-**Commit**: 98dd352cf72d10e792cca22e52a323eb28353449
-**Workflow Run**: 22537824697
+**Last Updated**: 2026-03-01T11:19:12Z
+**Commit**: b7bc5a643f8f15382b83cd0b11e428b89cc742e0
+**Workflow Run**: 22542314675
 
 ## Purpose
 This repository uses AI-assisted code generation for development and maintenance tasks.
@@ -12,19 +12,19 @@ transparency in AI-generated content.
 ## Recent Changes (Last Commit)
 ### Modified files with potential AI assistance:
 
-- .github/workflows/build-push.yml
+- AI_DISCLOSURE.md
+- helm/ansible-job/values-prod.yaml
 
 ## Repository Overview
 
 ### All code files in repository:
-- `.yaml` files: 19
-- `.yml` files: 11
-- `.sh` files: 4
-- `.md` files: 3
+- `.yaml` files: 22
+- `.yml` files: 13
+- `.sh` files: 8
+- `.md` files: 9
 - `.tpl` files: 1
 - `.cfg` files: 1
-- `.ini` files: 3
-- `Dockerfile` files: 2
+- `Dockerfile` files: 4
 
 ## Compliance Notes
 

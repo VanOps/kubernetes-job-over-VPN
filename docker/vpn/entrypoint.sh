@@ -54,9 +54,6 @@ if _has_placeholder; then
   while true; do sleep 30 & wait $!; done
 fi
 
-# WireGuard config must be 0600
-chmod 600 "${WG_CONFIG_PATH}"
-
 # ── Bring up interface ─────────────────────────────────────────────
 log "Starting WireGuard interface '${WG_INTERFACE}'..."
 if ! wg-quick up "${WG_INTERFACE}"; then
