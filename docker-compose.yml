@@ -6,17 +6,26 @@
 #   vpn service     → WireGuard sidecar (NET_ADMIN)
 #   ansible service → shares VPN network namespace (network_mode: service:vpn)
 #
+# VPN Lab (profile: vpn-lab) — simulates a real VPN server + remote host:
+#   vpn-server      → WireGuard server container (the "real" VPN endpoint)
+#   remote-host     → Debian SSH target, only reachable via VPN (10.10.20.10)
+#
 # Usage:
-#   make dev-up          → build + run test playbook
+#   # No VPN (skip mode, existing behaviour)
+#   SKIP_VPN=true docker compose up
+#
+#   # Full local lab with real WireGuard tunnel
+#   bash test/vpn-lab/setup.sh          # generate keys once
+#   SKIP_VPN=false docker compose --profile vpn-lab up
+#
 #   make dev-down        → stop & remove containers
 #   make dev-shell       → interactive shell in ansible container
 #   make dev-logs        → follow combined logs
 #
 # Prerequisites:
-#   1. Copy test/vpn/wg0.conf.example → test/vpn/wg0.conf (fill real values)
-#   2. Copy test/secrets/vault-password.example → test/secrets/vault-password
-#   3. Place SSH private key → test/secrets/ssh-private-key (chmod 600)
-#   4. Kernel module: sudo modprobe wireguard  (if not auto-loaded)
+#   1. Copy test/secrets/vault-password.example → test/secrets/vault-password
+#   2. Kernel module: sudo modprobe wireguard  (if not auto-loaded)
+#   3. For vpn-lab profile: run test/vpn-lab/setup.sh first
 # ══════════════════════════════════════════════════════════════════════
 
 x-logging: &default-logging
@@ -121,7 +130,81 @@ services:
     profiles:
       - run   # docker compose --profile run up --abort-on-container-exit
 
+  # ── VPN Lab: WireGuard Server ────────────────────────────────────
+  # Simulates the real WireGuard VPN endpoint.
+  # The vpn sidecar (client) connects to this container via vpn-net.
+  # Bridges VPN traffic into vpn-backend-net where remote-host lives.
+  vpn-server:
+    build:
+      context: ./docker/vpn-server
+      target: final
+    image: k8s-vpn-server-lab:local
+    container_name: vpn-server
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.ip_forward=1
+    environment:
+      - TZ=Europe/Madrid
+      - WG_INTERFACE=wg0
+    volumes:
+      - ./test/vpn-lab/wg0-server.conf:/etc/wireguard/wg0.conf:ro
+    ports:
+      - "51820:51820/udp"
+    networks:
+      - vpn-net
+      - vpn-backend-net
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging: *default-logging
+    profiles:
+      - vpn-lab
+
+  # ── VPN Lab: Remote Host ──────────────────────────────────────────
+  # Simulated Debian server that Ansible manages.
+  # Only reachable at 10.10.20.10 via the WireGuard tunnel —
+  # it has NO interface on vpn-net (not directly accessible).
+  remote-host:
+    build:
+      context: ./docker/remote-host
+    image: k8s-remote-host-lab:local
+    container_name: remote-host
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Madrid
+    volumes:
+      - ./test/secrets/ssh-public-key:/run/secrets/ssh-public-key:ro
+    networks:
+      vpn-backend-net:
+        ipv4_address: 10.10.20.10
+    healthcheck:
+      test: ["CMD", "pgrep", "sshd"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging: *default-logging
+    profiles:
+      - vpn-lab
+
 networks:
   vpn-net:
     driver: bridge
     # Subnet auto-assigned by Docker to avoid conflicts with existing networks
+
+  # Backend network: only vpn-server and remote-host are connected here.
+  # Remote-host is unreachable from vpn-net (no direct route) — all traffic
+  # must pass through the WireGuard tunnel via vpn-server.
+  vpn-backend-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.20.0/24

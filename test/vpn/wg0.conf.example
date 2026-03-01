@@ -1,21 +1,24 @@
 # ══════════════════════════════════════════════════════════════════════
 # WireGuard Client Config Example
-# Copy to: test/vpn/wg0.conf  (excluded from git via .gitignore)
+#
+# LOCAL VPN LAB: do NOT fill this file manually.
+#   Run  bash test/vpn-lab/setup.sh  — it writes test/vpn/wg0.conf
+#   automatically with matching keys and the correct endpoint.
+#
+# REAL VPN SERVER: copy to test/vpn/wg0.conf, fill values, SKIP_VPN=false.
 # ══════════════════════════════════════════════════════════════════════
 [Interface]
-# Ansible Job client private key (generate: wg genkey)
+# Client private key (generate: wg genkey)
 PrivateKey = CLIENT_PRIVATE_KEY_BASE64
-# VPN client IP (must be in server AllowedIPs range)
+# VPN client IP assigned by the server admin
 Address = 10.10.99.2/24
-# DNS (optional – use server IP or internal resolver)
-DNS = 10.10.0.1
 
 [Peer]
-# VPN server public key (from server: wg pubkey < server_private.key)
+# VPN server public key
 PublicKey = SERVER_PUBLIC_KEY_BASE64
-# Server endpoint (public IP or hostname + WireGuard port)
+# For the local lab: Endpoint = vpn-server:51820 (Docker DNS name)
+# For a real server: use its public IP or hostname
 Endpoint = vpn.example.com:51820
-# Routes through VPN: all target subnets + server management
-AllowedIPs = 10.10.0.0/24, 10.20.0.0/24, 10.30.0.0/24
-# Keep NAT alive
+# VPN subnet + private subnets behind the VPN
+AllowedIPs = 10.10.99.0/24, 10.10.20.0/24
 PersistentKeepalive = 25

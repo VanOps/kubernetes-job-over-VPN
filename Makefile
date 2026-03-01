@@ -73,18 +73,20 @@ build-push: build push ## Build and push all images
 ## ── Local Development ──────────────────────────────────────────────────
 
 .PHONY: dev-setup
-dev-setup: ## Copy example test files (first-time setup)
-	@echo "Setting up local test files..."
-	@[ -f test/vpn/wg0.conf ] || \
-	  (cp test/vpn/wg0.conf.example test/vpn/wg0.conf && \
-	   echo "  ✓ Created test/vpn/wg0.conf — edit with real WireGuard values")
+dev-setup: ## First-time setup: generate VPN lab keys + copy example secrets
+	@echo "Setting up local dev environment..."
+	@echo ""
+	@echo "── Secrets ──────────────────────────────────"
 	@[ -f test/secrets/vault-password ] || \
 	  (cp test/secrets/vault-password.example test/secrets/vault-password && \
 	   echo "  ✓ Created test/secrets/vault-password — set your vault password")
-	@[ -f test/secrets/ssh-private-key ] || \
-	  echo "  ⚠  Create test/secrets/ssh-private-key (chmod 600) with your SSH key"
 	@echo ""
-	@echo "Then run: make dev-up"
+	@echo "── VPN Lab keys (WireGuard + SSH) ───────────"
+	bash test/vpn-lab/setup.sh
+	@echo ""
+	@echo "Ready. Common next steps:"
+	@echo "  make lab-up             → start VPN lab only (standalone)"
+	@echo "  make dev-up             → full local stack (VPN + Ansible executor)"
 
 .PHONY: dev-up
 dev-up: build ## Build images and run test playbook locally (VPN + Ansible)
@@ -136,6 +138,91 @@ dev-shell: ## Open shell in Ansible container (VPN must be running)
 .PHONY: dev-vpn-status
 dev-vpn-status: ## Show WireGuard status in local VPN container
 	docker compose --profile dev exec vpn wg show wg0
+
+## ── VPN Lab (Docker simulation) ────────────────────────────────────────
+# Simulates a real WireGuard VPN server + remote Debian host using Docker.
+# Use this to test the full VPN tunnel flow locally or from a K8s dev cluster
+# without needing a real VPN server.
+# Prerequisite: Docker with WireGuard kernel module (modprobe wireguard).
+
+LAB_COMPOSE := docker-compose.vpn-lab.yml
+
+.PHONY: lab-setup
+lab-setup: ## Generate WireGuard + SSH keys for the VPN lab (run once)
+	@echo "Generating VPN lab keys and configs..."
+	bash test/vpn-lab/setup.sh
+
+.PHONY: lab-build
+lab-build: ## Build VPN lab Docker images (vpn-server + remote-host)
+	docker compose -f $(LAB_COMPOSE) build
+
+.PHONY: lab-up
+lab-up: ## Start VPN lab (vpn-server + remote-host). Runs lab-setup if keys missing.
+	@[ -f test/vpn-lab/wg0-server.conf ] || $(MAKE) lab-setup
+	docker compose -f $(LAB_COMPOSE) up -d --build
+	@echo "Waiting for vpn-server to become healthy (max 30s)..."
+	@elapsed=0; \
+	while true; do \
+	  status=$$(docker inspect vpn-server --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing"); \
+	  state=$$(docker inspect vpn-server --format '{{.State.Status}}' 2>/dev/null || echo "missing"); \
+	  if [ "$$status" = "healthy" ]; then \
+	    echo "vpn-server is healthy."; break; \
+	  fi; \
+	  if [ "$$state" = "exited" ] || [ "$$state" = "dead" ]; then \
+	    echo ""; echo "ERROR: vpn-server crashed. Logs:"; \
+	    docker compose -f $(LAB_COMPOSE) logs vpn-server; exit 1; \
+	  fi; \
+	  if [ $$elapsed -ge 30 ]; then \
+	    echo "TIMEOUT: vpn-server not healthy after 30s."; \
+	    docker compose -f $(LAB_COMPOSE) logs vpn-server; exit 1; \
+	  fi; \
+	  printf "."; sleep 2; elapsed=$$((elapsed + 2)); \
+	done
+	@echo ""
+	@echo "VPN Lab is up."
+	@echo "  WireGuard server : UDP $$(hostname -I | awk '{print $$1}'):51820"
+	@echo "  Remote host (VPN): 10.10.20.10  (reachable only via tunnel)"
+	@echo ""
+	@echo "To use with the full local stack:"
+	@echo "  SKIP_VPN=false docker compose --profile vpn-lab up"
+
+.PHONY: lab-down
+lab-down: ## Stop and remove VPN lab containers
+	docker compose -f $(LAB_COMPOSE) down
+
+.PHONY: lab-logs
+lab-logs: ## Follow VPN lab logs (vpn-server + remote-host)
+	docker compose -f $(LAB_COMPOSE) logs -f
+
+.PHONY: lab-vpn-status
+lab-vpn-status: ## Show WireGuard status on the VPN server
+	docker exec vpn-server wg show wg0
+
+.PHONY: lab-test
+lab-test: ## Test VPN connectivity: ping remote-host through the WireGuard tunnel
+	@echo "=== VPN Lab Connectivity Test ==="
+	@echo ""
+	@echo "1. WireGuard server status:"
+	@docker exec vpn-server wg show wg0
+	@echo ""
+	@echo "2. Ping remote-host (10.10.20.10) from vpn-sidecar:"
+	@docker exec vpn-sidecar ping -c 3 10.10.20.10 && \
+	  echo "  ✓ remote-host reachable via VPN" || \
+	  echo "  ✗ FAILED — ensure SKIP_VPN=false and vpn-sidecar is connected"
+
+.PHONY: lab-shell
+lab-shell: ## Open a shell inside the remote-host container
+	docker exec -it remote-host bash
+
+.PHONY: lab-clean
+lab-clean: lab-down ## Stop VPN lab and remove all generated keys/configs
+	@echo "Removing generated VPN lab files..."
+	rm -f test/vpn-lab/server.key test/vpn-lab/server.pub \
+	      test/vpn-lab/client.key test/vpn-lab/client.pub \
+	      test/vpn-lab/wg0-server.conf \
+	      test/vpn/wg0.conf \
+	      test/secrets/ssh-public-key test/secrets/ssh-private-key
+	@echo "Done. Run 'make lab-setup' to regenerate."
 
 ## ── Ansible Vault ──────────────────────────────────────────────────────
 

@@ -6,9 +6,16 @@
 test/vpn/*.conf
 !test/vpn/*.example
 
+# VPN Lab — generated keys and configs (run test/vpn-lab/setup.sh to create)
+test/vpn-lab/*.key
+test/vpn-lab/*.pub
+test/vpn-lab/wg0-server.conf
+!test/vpn-lab/*.example
+
 # Ansible vault password and SSH keys for local testing
 test/secrets/vault-password
 test/secrets/ssh-private-key
+test/secrets/ssh-public-key
 test/secrets/*.key
 test/secrets/*.pem
 test/secrets/*.cert

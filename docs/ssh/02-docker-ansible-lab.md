@@ -1,927 +1,291 @@
-# 02 — Lab Docker Compose: Ansible + SSH Multi-Host
+# 02 — Lab Docker Compose: Ansible + SSH sobre VPN
 
-**Entorno**: Debian 12, Docker 24+, Ansible 2.16+  
-**Objetivo**: Entorno local reproducible para experimentar con configuraciones SSH de Ansible sin infraestructura cloud.
+**Entorno**: Debian 12, Docker 24+, WireGuard kernel module
+**Objetivo**: Probar localmente el ciclo completo — túnel WireGuard + Ansible ejecutando playbooks sobre SSH — sin necesitar infraestructura cloud.
 
 ---
 
 ## 📋 Tabla de Contenidos
 
-1. [Arquitectura del Lab](#arquitectura)
+1. [Arquitectura](#arquitectura)
 2. [Prerequisitos](#prerequisitos)
 3. [Estructura de Archivos](#estructura)
-4. [Docker Compose Setup](#docker-compose)
-5. [Inventory Ansible](#inventory)
-6. [Playbook de Test](#playbook)
-7. [Ejecución del Lab](#ejecucion)
-8. [Diagrama de Secuencia](#diagrama-secuencia)
-9. [Validación y Troubleshooting](#validacion)
-10. [Ejercicios Propuestos](#ejercicios)
+4. [Puesta en marcha](#ejecucion)
+5. [Diagrama de Secuencia](#diagrama-secuencia)
+6. [Validación y Troubleshooting](#validacion)
 
 ---
 
-## <a id="arquitectura"></a>1. Arquitectura del Lab
+## <a id="arquitectura"></a>1. Arquitectura
 
-Este lab simula un **entorno Ansible multi-host** usando Docker Compose con:
-
-- **ansible-control**: Container con Ansible que ejecuta playbooks
-- **host-local**: Target SSH en la misma red Docker (simulación LAN)
-- **host-remoto**: Target SSH accesible solo vía ProxyJump (simulación WAN/VPN)
-- **bastion**: Bastion host intermediario para ProxyJump
+El proyecto usa Docker Compose para simular exactamente el patrón Kubernetes: el sidecar VPN y el executor Ansible comparten el mismo namespace de red, igual que en un Pod.
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Docker Network: ansible-lab-net (172.28.0.0/16)                    │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌──────────────────┐         ┌──────────────────┐                 │
-│  │ ansible-control  │ SSH ────▶│ host-local       │                 │
-│  │ Debian 12        │  :22     │ Debian 12        │                 │
-│  │ Ansible 2.16     │          │ OpenSSH Server   │                 │
-│  │ 172.28.0.10      │          │ 172.28.0.20      │                 │
-│  └──────────────────┘          └──────────────────┘                 │
-│           │                                                          │
-│           │ SSH ProxyJump                                            │
-│           ▼                                                          │
-│  ┌──────────────────┐         ┌──────────────────┐                 │
-│  │ bastion          │ SSH ────▶│ host-remoto      │                 │
-│  │ Debian 12        │  :22     │ Debian 12        │                 │
-│  │ OpenSSH Server   │          │ OpenSSH Server   │                 │
-│  │ 172.28.0.30      │          │ 172.28.0.40      │                 │
-│  └──────────────────┘          └──────────────────┘                 │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  vpn-net  (bridge, auto-subnet)                                  │
+│                                                                  │
+│   ┌─────────────────────┐        ┌──────────────────────────┐   │
+│   │  vpn-sidecar        │◀──UDP──│  vpn-server              │   │
+│   │  WireGuard client   │ :51820 │  WireGuard server        │   │
+│   │  wg0: 10.10.99.2    │        │  wg0: 10.10.99.1         │   │
+│   │                     │        │                          │   │
+│   │  ┌───────────────┐  │        │  vpn-backend-net ────────┼─┐ │
+│   │  │ ansible       │  │        └──────────────────────────┘ │ │
+│   │  │ (network_mode │  │                                      │ │
+│   │  │  service:vpn) │  │        ┌──────────────────────────┐ │ │
+│   │  │               │──┼─SSH────▶  remote-host             │◀┘ │
+│   │  │ wg0 visible   │  │  via   │  10.10.20.10             │   │
+│   │  │ aquí también  │  │  túnel │  sshd :22                │   │
+│   │  └───────────────┘  │        └──────────────────────────┘   │
+│   └─────────────────────┘                                        │
+└──────────────────────────────────────────────────────────────────┘
 
 Flujo:
-1. ansible-control → host-local (direct SSH)
-2. ansible-control → bastion → host-remoto (ProxyJump)
+1. vpn-server arranca como WireGuard server (UDP 51820)
+2. vpn-sidecar conecta → establece túnel wg0 (10.10.99.1 ↔ 10.10.99.2)
+3. vpn-server hace MASQUERADE → reenvía tráfico a vpn-backend-net
+4. ansible (comparte netns con vpn-sidecar) → SSH a 10.10.20.10 via wg0
 ```
+
+**Por qué `network_mode: service:vpn`**: replica el comportamiento de Kubernetes donde todos los containers de un Pod comparten el mismo namespace de red. El executor Ansible ve la interfaz `wg0` del sidecar y todo el tráfico SSH sale por el túnel.
 
 ---
 
 ## <a id="prerequisitos"></a>2. Prerequisitos
 
-### Sistema Host (Debian 12)
-
 ```bash
-# Docker Engine + Compose
-sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-plugin
+# Módulo WireGuard en el kernel host
+sudo modprobe wireguard
+lsmod | grep wireguard
 
-# Verificar versiones
-docker --version          # Docker version 24.0+
-docker compose version    # Docker Compose version v2.20+
+# Docker Compose v2
+docker compose version   # v2.20+
 
-# Usuario en grupo docker (evita sudo)
-sudo usermod -aG docker $USER
-newgrp docker
-
-# Herramientas útiles
-sudo apt-get install -y make tree ssh-audit
-```
-
-### VSCode Extensions (Opcional)
-
-```bash
-code --install-extension ms-azuretools.vscode-docker
-code --install-extension redhat.ansible
+# make
+sudo apt-get install -y make
 ```
 
 ---
 
 ## <a id="estructura"></a>3. Estructura de Archivos
 
-Crear la siguiente estructura en tu workspace:
+Los archivos relevantes del proyecto:
 
 ```
 kubernetes-job-over-VPN/
-├── lab1/                           # ← Lab Docker Compose SSH
-│   ├── docker-compose.yml
-│   ├── Dockerfile.ansible-control
-│   ├── Dockerfile.ssh-target
-│   ├── ssh-keys/                   # Generadas por script
-│   │   ├── id_ed25519
-│   │   ├── id_ed25519.pub
-│   │   └── authorized_keys
-│   ├── ansible/
-│   │   ├── ansible.cfg
-│   │   ├── inventory/
-│   │   │   └── hosts.yml
-│   │   └── playbooks/
-│   │       └── test-ssh.yml
-│   └── scripts/
-│       └── generate-keys.sh
-└── Makefile                         # Agregar target: make lab1-run
+├── docker/
+│   ├── vpn/                     # WireGuard client sidecar
+│   │   ├── Dockerfile
+│   │   ├── entrypoint.sh        # wg-quick up + monitor loop
+│   │   └── healthcheck.sh       # comprueba /tmp/vpn-ready
+│   ├── vpn-server/              # WireGuard server (lab)
+│   │   ├── Dockerfile
+│   │   ├── entrypoint.sh
+│   │   └── healthcheck.sh
+│   ├── remote-host/             # Debian SSH target (lab)
+│   │   ├── Dockerfile           # openssh-server + usuario ansible
+│   │   └── entrypoint.sh        # instala authorized_keys + sshd
+│   └── ansible/
+│       ├── Dockerfile
+│       ├── scripts/
+│       │   ├── entrypoint.sh    # espera wg0 → ejecuta ansible-playbook
+│       │   └── wait-for-vpn.sh
+│       └── ssh_config
+├── ansible/
+│   ├── ansible.cfg
+│   ├── inventories/
+│   │   └── dev/
+│   │       ├── hosts.yml        # remote-dev → 10.10.20.10
+│   │       └── group_vars/all.yml
+│   ├── playbooks/
+│   │   ├── test-connectivity.yml
+│   │   └── site.yml
+│   └── roles/common/
+├── test/
+│   ├── vpn-lab/
+│   │   ├── setup.sh             # genera claves WireGuard + SSH
+│   │   ├── wg0-server.conf      # config servidor (generado)
+│   │   └── wg0-server.conf.example
+│   ├── vpn/
+│   │   └── wg0.conf             # config cliente sidecar (generado)
+│   └── secrets/
+│       ├── ssh-private-key      # clave SSH Ansible (generada)
+│       └── ssh-public-key       # montada en remote-host (generada)
+├── docker-compose.yml           # stack completo (profile vpn-lab)
+└── docker-compose.vpn-lab.yml   # lab standalone: solo server + remote-host
 ```
 
 ---
 
-## <a id="docker-compose"></a>4. Docker Compose Setup
+## <a id="ejecucion"></a>4. Puesta en marcha
 
-### lab1/docker-compose.yml
-
-```yaml
----
-# ══════════════════════════════════════════════════════════════════════
-# Docker Compose — Lab 1: Ansible SSH Multi-Host
-# ══════════════════════════════════════════════════════════════════════
-
-services:
-  # ── Ansible Control Node ────────────────────────────────────────────
-  ansible-control:
-    build:
-      context: .
-      dockerfile: Dockerfile.ansible-control
-    container_name: lab1-ansible-control
-    hostname: ansible-control
-    networks:
-      ansible-lab-net:
-        ipv4_address: 172.28.0.10
-    volumes:
-      - ./ansible:/ansible:ro
-      - ./ssh-keys:/root/.ssh:ro
-    environment:
-      - ANSIBLE_CONFIG=/ansible/ansible.cfg
-      - ANSIBLE_HOST_KEY_CHECKING=False # Para lab, simplificar
-    tty: true
-    stdin_open: true
-    command: sleep infinity # Keep alive para docker exec
-
-  # ── SSH Target: Host Local ──────────────────────────────────────────
-  host-local:
-    build:
-      context: .
-      dockerfile: Dockerfile.ssh-target
-    container_name: lab1-host-local
-    hostname: host-local
-    networks:
-      ansible-lab-net:
-        ipv4_address: 172.28.0.20
-    volumes:
-      - ./ssh-keys/authorized_keys:/root/.ssh/authorized_keys:ro
-    environment:
-      - SSH_ENABLE_PASSWORD_AUTH=false
-
-  # ── SSH Target: Bastion ─────────────────────────────────────────────
-  bastion:
-    build:
-      context: .
-      dockerfile: Dockerfile.ssh-target
-    container_name: lab1-bastion
-    hostname: bastion
-    networks:
-      ansible-lab-net:
-        ipv4_address: 172.28.0.30
-    volumes:
-      - ./ssh-keys/authorized_keys:/root/.ssh/authorized_keys:ro
-    environment:
-      - SSH_ENABLE_PASSWORD_AUTH=false
-
-  # ── SSH Target: Host Remoto ─────────────────────────────────────────
-  host-remoto:
-    build:
-      context: .
-      dockerfile: Dockerfile.ssh-target
-    container_name: lab1-host-remoto
-    hostname: host-remoto
-    networks:
-      ansible-lab-net:
-        ipv4_address: 172.28.0.40
-    volumes:
-      - ./ssh-keys/authorized_keys:/root/.ssh/authorized_keys:ro
-    environment:
-      - SSH_ENABLE_PASSWORD_AUTH=false
-
-networks:
-  ansible-lab-net:
-    driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.28.0.0/16
-```
-
----
-
-### lab1/Dockerfile.ansible-control
-
-```dockerfile
-# ══════════════════════════════════════════════════════════════════════
-# Dockerfile — Ansible Control Node (Debian 12)
-# ══════════════════════════════════════════════════════════════════════
-
-FROM debian:12-slim AS base
-
-ENV DEBIAN_FRONTEND=noninteractive \
-    LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8 \
-    PYTHONUNBUFFERED=1 \
-    ANSIBLE_VERSION=2.16.*
-
-# ── System packages ────────────────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    python3-venv \
-    openssh-client \
-    sshpass \
-    git \
-    curl \
-    vim \
-    locales \
-    ca-certificates \
-    && locale-gen en_US.UTF-8 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# ── Ansible installation ───────────────────────────────────────────────
-RUN pip3 install --no-cache-dir --break-system-packages \
-    ansible-core==${ANSIBLE_VERSION} \
-    jmespath \
-    netaddr \
-    passlib
-
-# ── SSH config for ProxyJump ───────────────────────────────────────────
-RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh && \
-    echo "Host bastion\n\
-    HostName 172.28.0.30\n\
-    User root\n\
-    IdentityFile /root/.ssh/id_ed25519\n\
-    StrictHostKeyChecking accept-new\n\
-\n\
-Host host-remoto\n\
-    HostName 172.28.0.40\n\
-    User root\n\
-    ProxyJump bastion\n\
-    IdentityFile /root/.ssh/id_ed25519\n\
-    StrictHostKeyChecking accept-new\n\
-" > /root/.ssh/config && chmod 600 /root/.ssh/config
-
-WORKDIR /ansible
-
-CMD ["/bin/bash"]
-```
-
----
-
-### lab1/Dockerfile.ssh-target
-
-```dockerfile
-# ══════════════════════════════════════════════════════════════════════
-# Dockerfile — SSH Target Host (Debian 12)
-# ══════════════════════════════════════════════════════════════════════
-
-FROM debian:12-slim
-
-ENV DEBIAN_FRONTEND=noninteractive \
-    LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8
-
-# ── SSH Server + Python ────────────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openssh-server \
-    python3 \
-    sudo \
-    locales \
-    && locale-gen en_US.UTF-8 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# ── SSH daemon config ──────────────────────────────────────────────────
-RUN mkdir /var/run/sshd && \
-    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config && \
-    sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-
-# ── Create .ssh directory for root ─────────────────────────────────────
-RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh
-
-# ── Entrypoint ─────────────────────────────────────────────────────────
-COPY <<'EOF' /entrypoint.sh
-#!/bin/bash
-set -e
-
-# Regenerate host keys (cada container tiene su propia identidad)
-ssh-keygen -A
-
-# Start SSH daemon
-/usr/sbin/sshd -D
-EOF
-
-RUN chmod +x /entrypoint.sh
-
-EXPOSE 22
-
-CMD ["/entrypoint.sh"]
-```
-
----
-
-## <a id="inventory"></a>5. Inventory Ansible
-
-### lab1/ansible/inventory/hosts.yml
-
-```yaml
----
-all:
-  vars:
-    ansible_connection: ssh
-    ansible_user: root
-    ansible_ssh_private_key_file: /root/.ssh/id_ed25519
-    ansible_python_interpreter: /usr/bin/python3
-
-  children:
-    local_hosts:
-      hosts:
-        host-local:
-          ansible_host: 172.28.0.20
-
-    remote_hosts:
-      hosts:
-        host-remoto:
-          ansible_host: 172.28.0.40
-          # ProxyJump se configura en ~/.ssh/config del control node
-          ansible_ssh_extra_args: "-o ProxyJump=bastion"
-
-    bastion_hosts:
-      hosts:
-        bastion:
-          ansible_host: 172.28.0.30
-```
-
----
-
-### lab1/ansible/ansible.cfg
-
-```ini
-[defaults]
-inventory         = inventory/hosts.yml
-roles_path        = roles
-host_key_checking = False  # Lab simplificado
-timeout           = 30
-forks             = 5
-gathering         = smart
-display_skipped_hosts = False
-stdout_callback   = yaml
-
-[ssh_connection]
-ssh_args = -o ControlMaster=auto -o ControlPersist=60s
-control_path = /tmp/ansible-ssh-%%h-%%p-%%r
-pipelining = True
-transfer_method = smart
-
-[privilege_escalation]
-become = False  # Ya somos root en lab
-```
-
----
-
-## <a id="playbook"></a>6. Playbook de Test
-
-### lab1/ansible/playbooks/test-ssh.yml
-
-```yaml
----
-# ══════════════════════════════════════════════════════════════════════
-# Playbook — Test SSH Connectivity Lab
-# ══════════════════════════════════════════════════════════════════════
-
-- name: "Test Ansible SSH Connections"
-  hosts: all
-  gather_facts: true
-  tasks:
-    - name: Ping hosts
-      ansible.builtin.ping:
-      register: ping_result
-
-    - name: Display host info
-      ansible.builtin.debug:
-        msg: |
-          ✓ Host: {{ inventory_hostname }}
-          ✓ IP: {{ ansible_host }}
-          ✓ OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
-          ✓ Hostname: {{ ansible_hostname }}
-          ✓ Python: {{ ansible_python_version }}
-
-    - name: Check SSH connection path
-      ansible.builtin.command: echo $SSH_CONNECTION
-      register: ssh_connection
-      changed_when: false
-
-    - name: Display SSH connection
-      ansible.builtin.debug:
-        msg: "SSH Connection from: {{ ssh_connection.stdout }}"
-
-    - name: Test ProxyJump (solo remote_hosts)
-      ansible.builtin.shell: |
-        if netstat -tn | grep -q ':22.*ESTABLISHED'; then
-          echo "✓ SSH connection established"
-        else
-          echo "⚠ No SSH connection found"
-        fi
-      register: ssh_check
-      changed_when: false
-      when: inventory_hostname in groups['remote_hosts']
-
-    - name: Create test file
-      ansible.builtin.copy:
-        content: |
-          Lab: Docker Compose Ansible SSH
-          Host: {{ inventory_hostname }}
-          Deployed: {{ ansible_date_time.iso8601 }}
-        dest: /tmp/ansible-test.txt
-        mode: "0644"
-
-    - name: Read test file
-      ansible.builtin.slurp:
-        src: /tmp/ansible-test.txt
-      register: test_file
-
-    - name: Display test file content
-      ansible.builtin.debug:
-        msg: "{{ test_file['content'] | b64decode }}"
-```
-
----
-
-## <a id="ejecucion"></a>7. Ejecución del Lab
-
-### Script: lab1/scripts/generate-keys.sh
+### Primera vez
 
 ```bash
-#!/usr/bin/env bash
-# ══════════════════════════════════════════════════════════════════════
-# Generate SSH keys for Lab 1
-# ══════════════════════════════════════════════════════════════════════
-
-set -euo pipefail
-
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-KEY_DIR="${SCRIPT_DIR}/../ssh-keys"
-
-mkdir -p "${KEY_DIR}"
-
-# Generate ED25519 key pair (modern, secure)
-if [[ ! -f "${KEY_DIR}/id_ed25519" ]]; then
-    echo "🔑 Generando par de claves SSH ED25519..."
-    ssh-keygen -t ed25519 -f "${KEY_DIR}/id_ed25519" -N "" -C "ansible-lab1"
-else
-    echo "✓ Claves SSH ya existen"
-fi
-
-# Create authorized_keys
-cp "${KEY_DIR}/id_ed25519.pub" "${KEY_DIR}/authorized_keys"
-
-# Set permissions
-chmod 600 "${KEY_DIR}/id_ed25519"
-chmod 644 "${KEY_DIR}/id_ed25519.pub"
-chmod 644 "${KEY_DIR}/authorized_keys"
-
-echo "✓ SSH keys generadas en: ${KEY_DIR}"
-ls -lh "${KEY_DIR}"
+# Genera keypairs WireGuard (server + client) y SSH (Ansible)
+make dev-setup
 ```
 
----
+Esto crea:
+- `test/vpn-lab/wg0-server.conf` — config del servidor WireGuard
+- `test/vpn/wg0.conf` — config del cliente sidecar (Endpoint: `vpn-server:51820`)
+- `test/secrets/ssh-private-key` / `ssh-public-key` — par de claves para Ansible
 
-### Agregar Target al Makefile Principal
+### Opción A — Lab VPN standalone (solo server + remote-host)
 
-Editar `Makefile` en la raíz del repo:
-
-```makefile
-## ── Lab 1: Docker Compose SSH ──────────────────────────────────────────
-
-.PHONY: lab1-setup
-lab1-setup: ## Setup Lab 1 SSH keys and structure
-	@echo "Setting up Lab 1..."
-	mkdir -p lab1/ansible/{inventory,playbooks,roles}
-	mkdir -p lab1/ssh-keys
-	mkdir -p lab1/scripts
-	chmod +x lab1/scripts/generate-keys.sh
-	cd lab1 && bash scripts/generate-keys.sh
-
-.PHONY: lab1-up
-lab1-up: lab1-setup ## Start Lab 1 containers
-	@echo "Starting Lab 1 containers..."
-	cd lab1 && docker compose up -d
-	@echo "Waiting for SSH services..."
-	sleep 5
-	@echo ""
-	@echo "✓ Lab 1 ready!"
-	@echo "  Containers:"
-	@docker compose -f lab1/docker-compose.yml ps
-	@echo ""
-	@echo "Run: make lab1-test"
-
-.PHONY: lab1-test
-lab1-test: ## Run Ansible test playbook (Lab 1)
-	@echo "Running Ansible playbook..."
-	cd lab1 && docker compose exec ansible-control \
-	  ansible-playbook -i inventory/hosts.yml playbooks/test-ssh.yml
-
-.PHONY: lab1-shell
-lab1-shell: ## Shell into ansible-control container
-	cd lab1 && docker compose exec ansible-control /bin/bash
-
-.PHONY: lab1-down
-lab1-down: ## Stop and remove Lab 1 containers
-	cd lab1 && docker compose down -v
-	@echo "✓ Lab 1 stopped"
-
-.PHONY: lab1-logs
-lab1-logs: ## Follow Lab 1 logs
-	cd lab1 && docker compose logs -f
-
-.PHONY: lab1-clean
-lab1-clean: lab1-down ## Clean Lab 1 (remove keys)
-	rm -rf lab1/ssh-keys/*
-	@echo "✓ Lab 1 cleaned"
-```
-
----
-
-### Comandos de Ejecución
+Útil para probar la conectividad VPN desde Kubernetes dev o desde la máquina host:
 
 ```bash
-# 1. Setup inicial (genera claves SSH)
-make lab1-setup
+make lab-up            # construye imágenes y arranca el lab
+make lab-vpn-status    # wg show wg0 en el servidor
+make lab-shell         # shell en remote-host para inspeccionar
+make lab-logs          # logs en tiempo real
+make lab-down          # para los containers
+```
 
-# 2. Levantar containers
-make lab1-up
+### Opción B — Stack completo (VPN + Ansible executor)
 
-# 3. Ejecutar playbook de test
-make lab1-test
+Simula el Job de Kubernetes completo de forma local:
 
-# 4. Shell interactivo en ansible-control
-make lab1-shell
+```bash
+SKIP_VPN=false docker compose --profile vpn-lab up
+```
 
-# Dentro del container, probar manualmente:
-ansible all -m ping
-ansible host-local -m setup -a 'filter=ansible_distribution*'
-ansible remote_hosts -m command -a 'ip addr show'
+Esto arranca en orden:
+1. `vpn-server` (WireGuard server, sano antes de continuar)
+2. `remote-host` (sshd, IP fija 10.10.20.10)
+3. `vpn` sidecar (conecta al servidor, levanta `wg0`)
+4. `ansible-run` (espera `wg0`, ejecuta el playbook y sale)
 
-# 5. Ver logs
-make lab1-logs
+Equivalente con make:
 
-# 6. Limpiar
-make lab1-down
-make lab1-clean
+```bash
+SKIP_VPN=false ANSIBLE_INVENTORY=inventories/dev make dev-up
+```
+
+### Opción C — Sin VPN real (modo no-op)
+
+Para probar la imagen Ansible aislada, sin túnel:
+
+```bash
+SKIP_VPN=true docker compose up vpn
+# ansible puede arrancar pero no alcanzará 10.10.20.10
 ```
 
 ---
 
-## <a id="diagrama-secuencia"></a>8. Diagrama de Secuencia: Docker Networking + SSH
+## <a id="diagrama-secuencia"></a>5. Diagrama de Secuencia
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant USER as Developer (Host)
     participant DC as Docker Compose
-    participant AC as ansible-control<br/>(172.28.0.10)
-    participant HL as host-local<br/>(172.28.0.20)
-    participant BS as bastion<br/>(172.28.0.30)
-    participant HR as host-remoto<br/>(172.28.0.40)
+    participant WGS as vpn-server
+    participant RH as remote-host
+    participant VPN as vpn-sidecar
+    participant ANS as ansible-run
 
-    USER->>DC: make lab1-up
-    DC->>AC: Build + Start container (sleep infinity)
-    DC->>HL: Start SSH daemon (:22)
-    DC->>BS: Start SSH daemon (:22)
-    DC->>HR: Start SSH daemon (:22)
+    Note over DC: docker compose --profile vpn-lab up
 
-    Note over AC,HR: Todos en bridge network 172.28.0.0/16
+    DC->>WGS: Start (NET_ADMIN, /dev/net/tun)
+    WGS->>WGS: wg-quick up wg0 (server 10.10.99.1)
+    WGS->>WGS: iptables MASQUERADE → vpn-backend-net
+    WGS-->>DC: healthy (/tmp/vpn-server-ready)
 
-    USER->>DC: make lab1-test
-    DC->>AC: docker exec ansible-playbook
+    DC->>RH: Start (vpn-backend-net: 10.10.20.10)
+    RH->>RH: instala authorized_keys
+    RH->>RH: sshd -D
+    RH-->>DC: healthy (pgrep sshd)
 
-    AC->>AC: Load inventory/hosts.yml
-    AC->>AC: Parse ansible.cfg (ControlMaster, pipelining)
+    DC->>VPN: Start (NET_ADMIN, monta wg0.conf)
+    VPN->>WGS: UDP handshake :51820
+    WGS-->>VPN: WireGuard handshake OK
+    VPN->>VPN: wg-quick up wg0 (client 10.10.99.2)
+    VPN-->>DC: healthy (/tmp/vpn-ready)
 
-    rect rgb(200, 230, 255)
-        Note right of AC: Test host-local (direct SSH)
-        AC->>HL: SSH connect 172.28.0.20:22
-        HL-->>AC: Accept pubkey (id_ed25519)
-        AC->>HL: ansible.builtin.ping (Python module)
-        HL-->>AC: pong (JSON result)
-        AC->>HL: ansible.builtin.setup (gather facts)
-        HL-->>AC: Facts (JSON)
-    end
-
-    rect rgb(255, 230, 200)
-        Note right of AC: Test bastion (direct SSH)
-        AC->>BS: SSH connect 172.28.0.30:22
-        BS-->>AC: Accept pubkey
-        AC->>BS: ansible.builtin.ping
-        BS-->>AC: pong
-    end
-
-    rect rgb(230, 255, 200)
-        Note right of AC: Test host-remoto (ProxyJump)
-        AC->>BS: SSH connect to bastion
-        BS-->>AC: SSH tunnel established
-        AC->>BS: Forward SSH to 172.28.0.40:22
-        BS->>HR: SSH connect (internal forward)
-        HR-->>BS: Accept pubkey
-        BS-->>AC: Tunnel -> host-remoto established
-        AC->>HR: ansible.builtin.ping (via tunnel)
-        HR-->>AC: pong (via tunnel)
-        AC->>HR: ansible.builtin.copy (create test file)
-        HR-->>AC: changed=true
-    end
-
-    AC->>AC: Generate YAML output report
-    AC-->>USER: Display results (stdout)
-
-    USER->>DC: make lab1-down
-    DC->>AC: Stop container
-    DC->>HL: Stop container
-    DC->>BS: Stop container
-    DC->>HR: Stop container
+    DC->>ANS: Start (network_mode: service:vpn)
+    Note over ANS,VPN: Comparten netns — wg0 visible en ANS
+    ANS->>ANS: wait-for-vpn.sh (espera wg0 UP)
+    ANS->>RH: SSH 10.10.20.10:22 → via wg0 → MASQUERADE → 10.10.20.10
+    RH-->>ANS: SSH auth OK (pubkey)
+    ANS->>RH: ansible-playbook tasks
+    RH-->>ANS: results (ok/changed)
+    ANS-->>DC: exit 0 (playbook OK) / exit 1 (FAIL)
 ```
-
-### Descripción de Fases
-
-**Fase 1 (Steps 1-5)**: Docker Compose levanta 4 containers en red bridge compartida  
-**Fase 2 (Steps 6-9)**: Ansible parsea inventory y configuración  
-**Fase 3 (Steps 10-15)**: Test SSH directo a host-local (sin ProxyJump)  
-**Fase 4 (Steps 16-19)**: Test SSH directo a bastion  
-**Fase 5 (Steps 20-29)**: Test SSH a host-remoto vía ProxyJump (túnel a través de bastion)  
-**Fase 6 (Steps 30-31)**: Output y cleanup
 
 ---
 
-## <a id="validacion"></a>9. Validación y Troubleshooting
+## <a id="validacion"></a>6. Validación y Troubleshooting
 
-### ✅ Verificaciones Exitosas
+### Checklist de validación
 
 ```bash
-# 1. Containers running
-docker compose -f lab1/docker-compose.yml ps
-# Todos en state "Up"
+# 1. VPN server: WireGuard activo y con handshake
+make lab-vpn-status
+# Debe mostrar: peer con latest-handshake reciente
 
-# 2. Red Docker creada
-docker network inspect lab1_ansible-lab-net
-# Ver IPs asignadas
+# 2. Remote-host: sshd corriendo y authorized_keys OK
+make lab-shell
+# Dentro: cat /home/ansible/.ssh/authorized_keys   ← debe tener la pubkey
+#         ss -tnl | grep :22                        ← sshd escuchando
 
-# 3. SSH accesible desde ansible-control
-docker compose -f lab1/docker-compose.yml exec ansible-control ssh -v root@172.28.0.20 hostname
-# Output: host-local
+# 3. Túnel establecido: ping desde vpn-sidecar a remote-host
+make lab-test
+# Debe responder ping a 10.10.20.10
 
-# 4. ProxyJump funcional
-docker compose -f lab1/docker-compose.yml exec ansible-control ssh -J bastion root@host-remoto hostname
-# Output: host-remoto
+# 4. Ansible llega al host
+docker exec vpn-sidecar wg show wg0
+# Ver: allowed ips = 10.10.99.2/32 en el peer (cliente)
 
-# 5. Ansible ping
-docker compose -f lab1/docker-compose.yml exec ansible-control ansible all -m ping
-# Todos "pong"
+# 5. Playbook completo
+SKIP_VPN=false docker compose --profile vpn-lab run --rm ansible-run
+# Debe terminar con "Playbook SUCCEEDED"
 ```
 
----
-
-### 🔴 Problema: "Connection refused"
-
-```
-fatal: [host-local]: UNREACHABLE! => {"msg": "Failed to connect to the host via ssh:
-ssh: connect to host 172.28.0.20 port 22: Connection refused"}
-```
-
-**Diagnóstico**:
+### 🔴 vpn-sidecar no levanta wg0
 
 ```bash
-# Verificar que SSH daemon está running
-docker compose -f lab1/docker-compose.yml exec host-local ps aux | grep sshd
+# Ver logs del sidecar
+docker logs vpn-sidecar
 
-# Ver logs del container
-docker logs lab1-host-local
-
-# Test manual desde control node
-docker compose -f lab1/docker-compose.yml exec ansible-control \
-  ssh -vvv -i /root/.ssh/id_ed25519 root@172.28.0.20
+# Causas habituales:
+#   - wg0.conf tiene placeholders → re-ejecutar make lab-setup
+#   - módulo wireguard no cargado → sudo modprobe wireguard
+#   - SKIP_VPN=true activo → asegúrate de pasar SKIP_VPN=false
 ```
 
-**Solución**:
+### 🔴 Ansible no alcanza 10.10.20.10
 
 ```bash
-# Reiniciar SSH daemon en target
-docker compose -f lab1/docker-compose.yml exec host-local /usr/sbin/sshd -D &
+# 1. Verificar que wg0 existe en el netns compartido
+docker exec ansible-run ip addr show wg0
 
-# O recrear container
-docker compose -f lab1/docker-compose.yml up -d --force-recreate host-local
+# 2. Verificar ruta hacia 10.10.20.0/24
+docker exec ansible-run ip route get 10.10.20.10
+# Esperado: via dev wg0
+
+# 3. Ping manual desde el sidecar
+docker exec vpn-sidecar ping -c 3 10.10.20.10
 ```
 
----
-
-### 🔴 Problema: "Permission denied (publickey)"
-
-```
-fatal: [host-local]: UNREACHABLE! => {"msg": "Failed to connect: Permission denied (publickey)."}
-```
-
-**Causas comunes**:
-
-- Permisos incorrectos en SSH key (debe ser 600)
-- `authorized_keys` no montado correctamente
-- Clave pública no coincide
-
-**Diagnóstico**:
+### 🔴 Permission denied (publickey) en SSH
 
 ```bash
-# Verificar permisos
-docker compose -f lab1/docker-compose.yml exec ansible-control ls -la /root/.ssh/
+# Verificar que la pubkey coincide
+diff <(docker exec remote-host cat /home/ansible/.ssh/authorized_keys) \
+     test/secrets/ssh-public-key
 
-# Verificar authorized_keys en target
-docker compose -f lab1/docker-compose.yml exec host-local cat /root/.ssh/authorized_keys
-
-# Comparar claves
-docker compose -f lab1/docker-compose.yml exec ansible-control cat /root/.ssh/id_ed25519.pub
+# Si no coincide: regenerar claves y reiniciar
+make lab-clean && make lab-setup && make lab-up
 ```
 
-**Solución**:
+### 🔴 vpn-server crashea al arrancar
 
 ```bash
-# Regenerar claves
-cd lab1 && bash scripts/generate-keys.sh
-
-# Recrear containers
-make lab1-down
-make lab1-up
+docker compose -f docker-compose.vpn-lab.yml logs vpn-server
+# Si dice "placeholder values": ejecutar make lab-setup primero
+# Si dice "wg-quick up failed": verificar NET_ADMIN capability y módulo wireguard
 ```
-
----
-
-### 🔴 Problema: ProxyJump falla
-
-```
-fatal: [host-remoto]: UNREACHABLE! => {"msg": "Failed to connect to the host via ssh:
-ssh: Could not resolve hostname bastion: Name or service not known"}
-```
-
-**Causa**: SSH config no cargado o DNS interno no resuelve
-
-**Solución**:
-
-```bash
-# Verificar ssh_config en ansible-control
-docker compose -f lab1/docker-compose.yml exec ansible-control cat /root/.ssh/config
-
-# Test minimal ProxyJump con IP
-docker compose -f lab1/docker-compose.yml exec ansible-control \
-  ssh -J root@172.28.0.30 -i /root/.ssh/id_ed25519 root@172.28.0.40 hostname
-
-# Si funciona con IP, problema es DNS. Editar /etc/hosts o usar IPs en ssh_config
-```
-
----
-
-## <a id="ejercicios"></a>10. Ejercicios Propuestos
-
-### 🔧 Ejercicio 1: Añadir Host con ProxyCommand
-
-**Objetivo**: Configurar un host usando `ProxyCommand` en lugar de `ProxyJump`.
-
-**Pasos**:
-
-1. Editar `Dockerfile.ansible-control`, añadir en `/root/.ssh/config`:
-
-   ```
-   Host host-remoto-alt
-       HostName 172.28.0.40
-       User root
-       ProxyCommand ssh -W %h:%p bastion
-       IdentityFile /root/.ssh/id_ed25519
-   ```
-
-2. Añadir en inventory:
-
-   ```yaml
-   remote_hosts:
-     hosts:
-       host-remoto-alt:
-         ansible_host: 172.28.0.40
-   ```
-
-3. Reconstruir: `make lab1-down && make lab1-up`
-4. Test: `make lab1-test`
-
----
-
-### 🔧 Ejercicio 2: Habilitar StrictHostKeyChecking
-
-**Objetivo**: Usar `accept-new` en lugar de `False` para seguridad.
-
-**Pasos**:
-
-1. Editar `ansible.cfg`:
-
-   ```ini
-   [defaults]
-   host_key_checking = True
-
-   [ssh_connection]
-   ssh_args = -o ControlMaster=auto -o ControlPersist=60s -o StrictHostKeyChecking=accept-new
-   ```
-
-2. Pre-poblar known_hosts en `Dockerfile.ansible-control`:
-
-   ```dockerfile
-   RUN ssh-keyscan 172.28.0.20 172.28.0.30 172.28.0.40 > /root/.ssh/known_hosts
-   ```
-
-3. Rebuild: `cd lab1 && docker compose build`
-4. Test: `make lab1-test`
-
----
-
-### 🔧 Ejercicio 3: Playbook con Roles
-
-**Objetivo**: Crear role `common` que instala paquetes.
-
-**Estructura**:
-
-```
-lab1/ansible/roles/common/
-├── tasks/
-│   └── main.yml
-└── defaults/
-    └── main.yml
-```
-
-**tasks/main.yml**:
-
-```yaml
----
-- name: Update apt cache
-  ansible.builtin.apt:
-    update_cache: yes
-    cache_valid_time: 3600
-
-- name: Install common packages
-  ansible.builtin.apt:
-    name: "{{ common_packages }}"
-    state: present
-```
-
-**defaults/main.yml**:
-
-```yaml
----
-common_packages:
-  - curl
-  - htop
-  - vim
-```
-
-**Playbook**:
-
-```yaml
-- hosts: all
-  roles:
-    - common
-```
-
----
-
-### 🔧 Ejercicio 4: Test de Latencia SSH
-
-**Objetivo**: Medir latencia con y sin ControlMaster.
-
-**Script**:
-
-```bash
-# Desde ansible-control
-time ssh root@host-local hostname  # Primera vez (handshake completo)
-time ssh root@host-local hostname  # Segunda vez (reutiliza socket)
-
-# Deshabilitar ControlMaster
-time ssh -o ControlMaster=no root@host-local hostname
-time ssh -o ControlMaster=no root@host-local hostname
-```
-
-**Medir con Ansible**:
-
-```bash
-# Con ControlMaster (default)
-time ansible host-local -m ping
-
-# Sin ControlMaster
-time ansible host-local -m ping -e 'ansible_ssh_args="-o ControlMaster=no"'
-```
-
----
-
-## 🔗 Referencias
-
-- [Docker Compose Networking](https://docs.docker.com/compose/networking/)
-- [Ansible Inventory Guide](https://docs.ansible.com/ansible/latest/user_guide/intro_inventory.html)
-- [SSH ProxyJump OpenSSH 7.3+](https://www.redhat.com/sysadmin/ssh-proxy-bastion-proxyjump)
-- [Lab Repo Completo](https://github.com/ansible/test-playbooks)
-
----
-
-## 📝 Notas Finales
-
-- Este lab es **solo educativo** — en producción usar StrictHostKeyChecking=yes
-- Los containers usan `root` para simplificar — en producción crear usuarios dedicados
-- Red Docker **no tiene salida internet** por defecto (aislamiento)
-- Para simular latencia, usar `tc` (Traffic Control) en host Docker
 
 ---
 
