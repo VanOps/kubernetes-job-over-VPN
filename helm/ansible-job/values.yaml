@@ -115,7 +115,7 @@ resources:
 securityContext:
   pod:
     runAsNonRoot: false # VPN sidecar needs NET_ADMIN (may need root-adjacent)
-    fsGroup: 1000        # secret volumes are group-owned by ansible GID → 0440 readable
+    fsGroup: 1000 # secret volumes are group-owned by ansible GID → 0440 readable
     seccompProfile:
       type: RuntimeDefault
   vpn:
@@ -142,7 +142,8 @@ affinity: {}
 timezone: Europe/Madrid
 
 # ── Image Pull Secrets ───────────────────────────────────────────────
-imagePullSecrets: []
+imagePullSecrets:
+  - name: ghcr-pull-secret
 
 # ── Monitoring (optional) ────────────────────────────────────────────
 monitoring:
