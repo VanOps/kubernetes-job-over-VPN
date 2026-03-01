@@ -3,12 +3,12 @@
 environment: prod
 vpn:
   image:
-    tag: "98dd352" # CI updates on main branch push; human approves the sync
+    tag: "dca96a2" # CI updates on main branch push; human approves the sync
     repository: ghcr.io/vanops/k8s-vpn-sidecar
   secretName: vpn-wireguard-config
 ansible:
   image:
-    tag: "98dd352"
+    tag: "dca96a2"
     repository: ghcr.io/vanops/k8s-ansible-executor
   playbook: playbooks/site.yml
   inventory: inventories/prod
