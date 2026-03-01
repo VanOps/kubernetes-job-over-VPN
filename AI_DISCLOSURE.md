@@ -1,8 +1,8 @@
 # AI Content Disclosure (EU AI Act Art.50)
 
-**Last Updated**: 2026-03-01T16:10:55Z
-**Commit**: 2e71dff8a05819f3d0fd7a95de456223ebb9f4b0
-**Workflow Run**: 22547238499
+**Last Updated**: 2026-03-01T16:44:07Z
+**Commit**: e2ea5737e54fa4d1c7cfeed97fd459dd58cab9bf
+**Workflow Run**: 22547824166
 
 ## Purpose
 This repository uses AI-assisted code generation for development and maintenance tasks.
@@ -12,7 +12,9 @@ transparency in AI-generated content.
 ## Recent Changes (Last Commit)
 ### Modified files with potential AI assistance:
 
-- ansible/playbooks/test-connectivity.yml
+- docs/argocd/01-deploy-argocd-dev.md
+- docs/helm/01-deploy-helm-lab.md
+- helm/ansible-job/values.yaml
 
 ## Repository Overview
 
@@ -20,7 +22,7 @@ transparency in AI-generated content.
 - `.yaml` files: 21
 - `.yml` files: 14
 - `.sh` files: 9
-- `.md` files: 12
+- `.md` files: 13
 - `.tpl` files: 1
 - `.cfg` files: 1
 - `Dockerfile` files: 5
