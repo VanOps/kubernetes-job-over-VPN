@@ -16,7 +16,9 @@ test/secrets/*.crt
 test/secrets/*.csr
 test/secrets/*.p12
 test/secrets/*.pfx
+test/secrets/ssh-public-key
 !test/secrets/*.example
+test/vpn-lab/
 
 # Ansible vault plaintext (only commit ENCRYPTED versions)
 ansible/vault/*.yml
