@@ -45,8 +45,9 @@ _wg_genkey() {
   if command -v wg &>/dev/null; then
     wg genkey
   else
+    # Redirect ALL apt-get output to /dev/null so only the key reaches stdout
     docker run --rm debian:bookworm-slim bash -c \
-      "apt-get update -qq && apt-get install -y -qq --no-install-recommends wireguard-tools 2>/dev/null && wg genkey"
+      "apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq --no-install-recommends wireguard-tools >/dev/null 2>&1 && wg genkey"
   fi
 }
 
@@ -56,7 +57,7 @@ _wg_pubkey() {
     echo "${privkey}" | wg pubkey
   else
     echo "${privkey}" | docker run --rm -i debian:bookworm-slim bash -c \
-      "apt-get update -qq && apt-get install -y -qq --no-install-recommends wireguard-tools 2>/dev/null && wg pubkey"
+      "apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq --no-install-recommends wireguard-tools >/dev/null 2>&1 && wg pubkey"
   fi
 }
 
@@ -100,12 +101,14 @@ ListenPort = ${WG_LISTEN_PORT}
 
 # Forward VPN traffic into the backend network (where remote-host lives).
 # Uses MASQUERADE so remote-host replies route back correctly.
-PostUp   = iptables -A FORWARD -i wg0 -j ACCEPT; \\
-           iptables -A FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT; \\
-           iptables -t nat -A POSTROUTING -s ${WG_VPN_SUBNET} ! -o wg0 -j MASQUERADE
-PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; \\
-           iptables -D FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT; \\
-           iptables -t nat -D POSTROUTING -s ${WG_VPN_SUBNET} ! -o wg0 -j MASQUERADE
+# Note: multiple PostUp/PostDown entries instead of \ continuation — wg-quick
+# parses line-by-line and does not support backslash continuation.
+PostUp   = iptables -A FORWARD -i wg0 -j ACCEPT
+PostUp   = iptables -A FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+PostUp   = iptables -t nat -A POSTROUTING -s ${WG_VPN_SUBNET} ! -o wg0 -j MASQUERADE
+PostDown = iptables -D FORWARD -i wg0 -j ACCEPT
+PostDown = iptables -D FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+PostDown = iptables -t nat -D POSTROUTING -s ${WG_VPN_SUBNET} ! -o wg0 -j MASQUERADE
 
 [Peer]
 # Ansible Job WireGuard client (sidecar)

@@ -37,8 +37,6 @@ if grep -qE 'SERVER_PRIVATE_KEY|CLIENT_PUBLIC_KEY|CHANGE_ME' "${WG_CONFIG_PATH}"
   exit 1
 fi
 
-chmod 600 "${WG_CONFIG_PATH}"
-
 # ── Enable IP forwarding ───────────────────────────────────────────
 # (Also set via sysctls in docker-compose, but belt-and-suspenders)
 log "Enabling IP forwarding..."
