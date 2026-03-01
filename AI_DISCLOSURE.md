@@ -1,8 +1,8 @@
 # AI Content Disclosure (EU AI Act Art.50)
 
-**Last Updated**: 2026-03-01T16:44:07Z
-**Commit**: e2ea5737e54fa4d1c7cfeed97fd459dd58cab9bf
-**Workflow Run**: 22547824166
+**Last Updated**: 2026-03-01T17:41:50Z
+**Commit**: 3d5f4f34dbd99c35d0ae54b6e3d7b2ba206a76ce
+**Workflow Run**: 22548875168
 
 ## Purpose
 This repository uses AI-assisted code generation for development and maintenance tasks.
@@ -12,17 +12,38 @@ transparency in AI-generated content.
 ## Recent Changes (Last Commit)
 ### Modified files with potential AI assistance:
 
+- DEVELOPER.md
+- README.md
+- ansible/inventories/prod/group_vars/all.yml
+- ansible/inventories/prod/hosts.yaml
+- ansible/inventories/staging/group_vars/all.yml
+- ansible/inventories/staging/hosts.yaml
+- ansible/playbooks/site.yml
+- docker-compose.yml
+- docker/ansible/scripts/entrypoint.sh
 - docs/argocd/01-deploy-argocd-dev.md
-- docs/helm/01-deploy-helm-lab.md
+- docs/ssh/02-docker-ansible-lab.md
+- docs/ssh/03-ssh-vpn-basics.md
+- docs/ssh/04-vpn-tunnel-lab.md
+- docs/vault/01-vault-setup-staging.md
+- docs/vault/README.md
+- docs/vault/vault-cheatsheet.md
+- helm/ansible-job/templates/job.yaml
+- helm/ansible-job/values-dev.yaml
+- helm/ansible-job/values-prod.yaml
+- helm/ansible-job/values-staging.yaml
 - helm/ansible-job/values.yaml
+- k8s/external-secrets/prod-external-secret.yaml
+- k8s/external-secrets/secret-store-vault.yaml
+- k8s/external-secrets/staging-external-secret.yaml
 
 ## Repository Overview
 
 ### All code files in repository:
 - `.yaml` files: 21
-- `.yml` files: 14
+- `.yml` files: 13
 - `.sh` files: 9
-- `.md` files: 13
+- `.md` files: 16
 - `.tpl` files: 1
 - `.cfg` files: 1
 - `Dockerfile` files: 5
