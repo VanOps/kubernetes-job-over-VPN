@@ -55,7 +55,7 @@
         msg: "{{ disk_info.stdout_lines }}"
 
     - name: "Grab file on /tmp to ensure process works over VPN"
-      ansible.builtin.command:
+      ansible.builtin.shell:
         cmd: "echo 'VPN Connectivity Test' > /home/ansible/vpn_test.txt && cat /home/ansible/vpn_test.txt"
       register: file_check
       changed_when: false
