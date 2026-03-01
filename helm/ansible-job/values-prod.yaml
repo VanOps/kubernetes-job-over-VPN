@@ -24,7 +24,7 @@ gitSync:
 # Release artifact — URL updated automatically by the "Release Ansible Package" workflow
 releaseArtifact:
   enabled: true
-  url: "https://github.com/VanOps/kubernetes-job-over-VPN/releases/download/v0.0.0/ansible-playbooks-v0.0.0.tar.gz"
+  url: "https://github.com/vanops/kubernetes-job-over-VPN/releases/download/1.0.0/ansible-playbooks-1.0.0.tar.gz"
 job:
   # ttlSecondsAfterFinished: 86400 # Disabled - Jobs will persist for full audit trail
   backoffLimit: 1 # fail fast in prod
