@@ -23,7 +23,7 @@ gitSync:
   branch: develop
 
 job:
-  ttlSecondsAfterFinished: 1800 # 30min – pods auto-cleaned quickly in dev
+  # ttlSecondsAfterFinished: 1800 # Disabled - Jobs will persist for audit
   backoffLimit: 3
   activeDeadlineSeconds: 900 # 15min max in dev
 
