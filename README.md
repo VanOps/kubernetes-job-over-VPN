@@ -453,6 +453,7 @@ Ver [**docs/ssh/README.md**](docs/ssh/README.md) para documentación completa.
 
 Documentación completa para configurar **HashiCorp Vault** como backend de secretos en el entorno de **staging**.
 
+
 📖 [**docs/vault/README.md**](docs/vault/README.md) — Guía completa de Vault para staging:
 
 - KV v2 mount point: `ansible-vpn`
