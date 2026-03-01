@@ -1,0 +1,112 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# Workflow: Release Ansible Package
+#
+# Triggers: GitHub Release published (tagged release only)
+# Output  : ansible-playbooks-vX.Y.Z.tar.gz attached to the release
+#
+# Purpose:
+#   Packages the ansible/ directory as a versioned tarball so that
+#   production deployments can download the artifact directly from the
+#   GitHub Release instead of cloning the repo with git-sync.
+#
+#   In prod, set gitSync.enabled=false and use an init container that
+#   downloads this tarball (see values-prod.yaml for reference).
+#
+# Exclusions from the package:
+#   - ansible/inventories/dev   (dev-only, not needed in prod)
+#   - ansible/vault/secrets.yml (encrypted vault file — keep in VCS,
+#                                but exclude from public release asset
+#                                if the repo is public; remove this
+#                                exclusion if the repo is private and
+#                                you want the vault file bundled)
+# ══════════════════════════════════════════════════════════════════════
+name: Release Ansible Package
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  package-ansible:
+    name: Package Ansible Playbooks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required to upload release assets
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Ansible tarball
+        id: build
+        run: |
+          VERSION="${{ github.ref_name }}"
+          ARCHIVE="ansible-playbooks-${VERSION}.tar.gz"
+
+          tar -czf "${ARCHIVE}" \
+            --exclude='ansible/inventories/dev' \
+            --exclude='ansible/vault/secrets.yml' \
+            ansible/
+
+          echo "archive=${ARCHIVE}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}"  >> "$GITHUB_OUTPUT"
+
+          echo "=== Archive built ==="
+          du -sh "${ARCHIVE}"
+          echo "=== Contents ==="
+          tar -tzf "${ARCHIVE}"
+
+      - name: Upload tarball to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            "${{ steps.build.outputs.archive }}" \
+            --clobber
+
+      - name: Update values-prod.yaml and commit to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name  "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          # Checkout main — the release was tagged from main, but the workflow
+          # checks out the tag ref. We need to push to the branch, not the tag.
+          git fetch origin main
+          git checkout main
+          git pull origin main
+
+          VERSION="${{ steps.build.outputs.version }}"
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+          ARCHIVE="${{ steps.build.outputs.archive }}"
+          ARTIFACT_URL="https://github.com/${OWNER}/${REPO}/releases/download/${VERSION}/${ARCHIVE}"
+          VALUES_FILE="helm/ansible-job/values-prod.yaml"
+
+          # Replace the url: line under releaseArtifact (two-space indent)
+          sed -i "s|^  url: .*|  url: \"${ARTIFACT_URL}\"|" "${VALUES_FILE}"
+
+          echo "=== Updated ${VALUES_FILE} ==="
+          grep -A3 'releaseArtifact:' "${VALUES_FILE}"
+
+          git add "${VALUES_FILE}"
+          git diff --cached --quiet && echo "No changes to commit — already up to date." && exit 0
+
+          git commit -m "ci: update prod artifact URL to ${VERSION} [skip ci]"
+          git push origin main
+
+      - name: Summary
+        run: |
+          echo "## Ansible Package Released" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field   | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | \`${{ steps.build.outputs.version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Asset   | \`${{ steps.build.outputs.archive }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download URL:" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/${{ github.repository }}/releases/download/${{ steps.build.outputs.version }}/${{ steps.build.outputs.archive }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"

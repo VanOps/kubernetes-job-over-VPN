@@ -453,21 +453,17 @@ Ver [**docs/ssh/README.md**](docs/ssh/README.md) para documentación completa.
 
 Documentación completa para configurar **HashiCorp Vault** como backend de secretos en el entorno de **staging**.
 
-📖 [**docs/vault/**](docs/vault/README.md) — Configuración de Vault para staging:
 
-- **[01-vault-setup-staging.md](docs/vault/01-vault-setup-staging.md)** — Guía completa
-  - KV v2 mount point: `ansible-vpn`
-  - Políticas de acceso y generación de tokens
-  - External Secrets Operator integration
-  - Estructura de paths y versionado
-  - Comandos para crear los 3 secretos necesarios
-  - Troubleshooting y debug completo
+📖 [**docs/vault/README.md**](docs/vault/README.md) — Guía completa de Vault para staging:
 
-- **[vault-cheatsheet.md](docs/vault/vault-cheatsheet.md)** — Referencia rápida
-  - Comandos esenciales Vault CLI
-  - CRUD de secretos con versionado
-  - Integration con Kubernetes
-  - Debug y verificación
+- KV v2 mount point: `ansible-vpn`
+- Quick Start y configuración paso a paso
+- Políticas de acceso y generación de tokens
+- External Secrets Operator integration
+- Estructura de paths y versionado
+- Comandos esenciales y operaciones CRUD
+- Actualización, rotación y rollback
+- Troubleshooting y debug completo
 
 ### Quick Start Vault
 

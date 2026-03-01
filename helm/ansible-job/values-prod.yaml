@@ -18,7 +18,13 @@ ansible:
     - name: APP_VERSION
       value: "stable"
 gitSync:
+  enabled: false  # prod uses immutable release artifact instead of git-sync
   branch: main
+
+# Release artifact — URL updated automatically by the "Release Ansible Package" workflow
+releaseArtifact:
+  enabled: true
+  url: "https://github.com/VanOps/kubernetes-job-over-VPN/releases/download/v0.0.0/ansible-playbooks-v0.0.0.tar.gz"
 job:
   # ttlSecondsAfterFinished: 86400 # Disabled - Jobs will persist for full audit trail
   backoffLimit: 1 # fail fast in prod
