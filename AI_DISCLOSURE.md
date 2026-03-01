@@ -1,8 +1,8 @@
 # AI Content Disclosure (EU AI Act Art.50)
 
-**Last Updated**: 2026-03-01T16:05:13Z
-**Commit**: 0ad8410dc562aa0395fbddcfd76026b72216f699
-**Workflow Run**: 22547138251
+**Last Updated**: 2026-03-01T16:10:55Z
+**Commit**: 2e71dff8a05819f3d0fd7a95de456223ebb9f4b0
+**Workflow Run**: 22547238499
 
 ## Purpose
 This repository uses AI-assisted code generation for development and maintenance tasks.
@@ -13,13 +13,6 @@ transparency in AI-generated content.
 ### Modified files with potential AI assistance:
 
 - ansible/playbooks/test-connectivity.yml
-- docker/vpn/entrypoint.sh
-- docs/helm/01-deploy-helm-lab.md
-- helm/ansible-job/templates/configmap.yaml
-- helm/ansible-job/templates/job.yaml
-- helm/ansible-job/values-dev.yaml
-- helm/ansible-job/values-staging.yaml
-- helm/ansible-job/values.yaml
 
 ## Repository Overview
 
