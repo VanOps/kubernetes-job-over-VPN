@@ -5,6 +5,7 @@ environment: staging
 vpn:
   image:
     tag: "dca96a2" # CI updates on staging branch push
+    pullPolicy: Always # force re-pull during dev; remove once image tag is pinned to a SHA
   secretName: vpn-wireguard-config
 
 ansible:
