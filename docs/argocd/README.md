@@ -115,7 +115,7 @@ El Job requiere **tres Secrets** en el namespace `ansible-jobs-dev` antes de que
 sincronizar correctamente. En dev se crean manualmente; en staging/prod los gestiona
 ExternalSecrets Operator.
 
-> **Para staging:** Ver la [guía completa de configuración de HashiCorp Vault](../vault/01-vault-setup-staging.md) con KV v2 mount, políticas y External Secrets Operator.
+> **Para staging:** Ver la [guía completa de configuración de HashiCorp Vault](../vault/README.md) con KV v2 mount, políticas y External Secrets Operator.
 
 ### 1. WireGuard config (`vpn-wireguard-config`)
 
@@ -893,6 +893,5 @@ kubectl get secrets -n ansible-jobs-dev \
 - [docs/helm/01-deploy-helm-lab.md](../helm/01-deploy-helm-lab.md) — Despliegue con Helm directo (sin ArgoCD)
 
 ### Gestión de Secretos
-- [docs/vault/01-vault-setup-staging.md](../vault/01-vault-setup-staging.md) — Configuración completa de HashiCorp Vault para staging
-- [docs/vault/README.md](../vault/README.md) — Guía rápida de Vault
+- [docs/vault/README.md](../vault/README.md) — Guía completa de HashiCorp Vault para staging
 - [k8s/external-secrets/](../../k8s/external-secrets/) — Manifests de ExternalSecrets para staging/prod
