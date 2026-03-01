@@ -96,8 +96,7 @@ kubernetes-job-over-VPN/
 │   │   ├── hosts.yml               # remote-dev → ansible_host: 10.10.20.10
 │   │   └── group_vars/all.yml
 │   └── playbooks/
-│       ├── test-connectivity.yml
-│       └── site.yml
+│       └── test-connectivity.yml   # playbook unificado
 ├── test/
 │   ├── vpn-lab/
 │   │   ├── setup.sh                # genera WireGuard + SSH keypairs
@@ -120,12 +119,12 @@ kubernetes-job-over-VPN/
 
 `test/vpn-lab/setup.sh` genera los keypairs WireGuard y SSH de forma automática. Los escribe directamente en las rutas que Docker Compose monta como volúmenes — no hay que editar ningún archivo manualmente.
 
-| Archivo generado | Dónde se monta |
-|---|---|
-| `test/vpn-lab/wg0-server.conf` | `vpn-server:/etc/wireguard/wg0.conf` |
-| `test/vpn/wg0.conf` | `vpn-sidecar:/etc/wireguard/wg0.conf` |
-| `test/secrets/ssh-private-key` | `ansible-run:/run/secrets/` |
-| `test/secrets/ssh-public-key` | `remote-host:/run/secrets/` |
+| Archivo generado               | Dónde se monta                        |
+| ------------------------------ | ------------------------------------- |
+| `test/vpn-lab/wg0-server.conf` | `vpn-server:/etc/wireguard/wg0.conf`  |
+| `test/vpn/wg0.conf`            | `vpn-sidecar:/etc/wireguard/wg0.conf` |
+| `test/secrets/ssh-private-key` | `ansible-run:/run/secrets/`           |
+| `test/secrets/ssh-public-key`  | `remote-host:/run/secrets/`           |
 
 ### Routing end-to-end
 
@@ -140,10 +139,10 @@ El `remote-host` ve las conexiones provenientes de la IP del `vpn-server` en `vp
 
 El `vpn-sidecar` tiene un modo no-op controlado por `SKIP_VPN`:
 
-| Valor | Comportamiento |
-|---|---|
+| Valor                     | Comportamiento                                                            |
+| ------------------------- | ------------------------------------------------------------------------- |
 | `SKIP_VPN=true` (default) | sidecar arranca en modo no-op, sin tunnel; `remote-host` no es alcanzable |
-| `SKIP_VPN=false` | sidecar levanta `wg0` conectando al `vpn-server`; `remote-host` accesible |
+| `SKIP_VPN=false`          | sidecar levanta `wg0` conectando al `vpn-server`; `remote-host` accesible |
 
 ---
 
@@ -261,6 +260,7 @@ make lab-test
 Con `make lab-up` corriendo, el puerto UDP 51820 queda expuesto en el host. Pasos:
 
 1. Editar (o generar de nuevo) el `wg0.conf` del Job apuntando al nodo host:
+
    ```ini
    [Peer]
    Endpoint   = <NODE_IP>:51820
@@ -268,6 +268,7 @@ Con `make lab-up` corriendo, el puerto UDP 51820 queda expuesto en el host. Paso
    ```
 
 2. Aplicar los secrets en el namespace dev:
+
    ```bash
    make k8s-secrets-dev
    ```

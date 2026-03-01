@@ -6,11 +6,12 @@ vpn:
     tag: "dca96a2" # CI updates on main branch push; human approves the sync
     repository: ghcr.io/vanops/k8s-vpn-sidecar
   secretName: vpn-wireguard-config
+  sidecarMode: "false" # EKS 1.28: no native sidecar support; one-shot init mode
 ansible:
   image:
     tag: "dca96a2"
     repository: ghcr.io/vanops/k8s-ansible-executor
-  playbook: playbooks/site.yml
+  playbook: playbooks/test-connectivity.yml
   inventory: inventories/prod
   verbosity: 0 # quiet in prod – logs only errors
   extraEnvVars:

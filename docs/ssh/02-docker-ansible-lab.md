@@ -102,9 +102,8 @@ kubernetes-job-over-VPN/
 │   │       ├── hosts.yml        # remote-dev → 10.10.20.10
 │   │       └── group_vars/all.yml
 │   ├── playbooks/
-│   │   ├── test-connectivity.yml
-│   │   └── site.yml
-│   └── roles/common/
+│   │   └── test-connectivity.yml  # playbook unificado
+│   └── roles/               # (opcional, tareas integradas en playbook)
 ├── test/
 │   ├── vpn-lab/
 │   │   ├── setup.sh             # genera claves WireGuard + SSH
@@ -132,6 +131,7 @@ make dev-setup
 ```
 
 Esto crea:
+
 - `test/vpn-lab/wg0-server.conf` — config del servidor WireGuard
 - `test/vpn/wg0.conf` — config del cliente sidecar (Endpoint: `vpn-server:51820`)
 - `test/secrets/ssh-private-key` / `ssh-public-key` — par de claves para Ansible
@@ -157,6 +157,7 @@ SKIP_VPN=false docker compose --profile vpn-lab --profile run up
 ```
 
 Esto arranca en orden:
+
 1. `vpn-server` (WireGuard server, sano antes de continuar)
 2. `remote-host` (sshd, IP fija 10.10.20.10)
 3. `vpn` sidecar (conecta al servidor, levanta `wg0`)

@@ -150,10 +150,8 @@ kubernetes-job-over-VPN/
 │   │   ├── staging/(hosts.ini + group_vars/all.yml)
 │   │   └── prod/   (hosts.ini + group_vars/all.yml)
 │   ├── playbooks/
-│   │   ├── test-connectivity.yml  # Playbook de prueba
-│   │   └── site.yml               # Playbook principal
-│   ├── roles/
-│   │   └── common/
+│   │   └── test-connectivity.yml  # Playbook unificado (test + deploy)
+│   ├── roles/                     # (opcional, tareas integradas en playbook)
 │   └── vault/
 │       └── secrets.yml.example
 │

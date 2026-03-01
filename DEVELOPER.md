@@ -51,7 +51,7 @@ Crea un archivo `.env` en la raíz (está en `.gitignore`) para sobreescribir de
 # .env  — NO commitear
 ARGOCD_SERVER=argocd.mi-cluster.example.com
 ARGOCD_TOKEN=<token>
-ANSIBLE_PLAYBOOK=playbooks/site.yml
+ANSIBLE_PLAYBOOK=playbooks/test-connectivity.yml
 ANSIBLE_VERBOSITY=3
 ```
 
@@ -159,7 +159,7 @@ make dev-shell         # bash en ansible-executor con VPN activa
 make dev-down          # para y limpia contenedores
 
 # Ejecutar un playbook distinto sin rebuild:
-ANSIBLE_PLAYBOOK=playbooks/site.yml make dev-up
+ANSIBLE_PLAYBOOK=playbooks/test-connectivity.yml make dev-up
 
 # Aumentar verbosity:
 ANSIBLE_VERBOSITY=4 make dev-up
@@ -192,13 +192,47 @@ ansible/
 │   ├── staging/
 │   └── prod/
 ├── playbooks/
-│   ├── test-connectivity.yml       # smoke test
-│   └── site.yml                    # playbook principal
-├── roles/common/
+│   └── test-connectivity.yml       # playbook unificado (test + deploy)
+├── roles/                          # (opcional, tareas integradas en playbook)
 └── vault/secrets.yml               # cifrado con ansible-vault (NO .example)
 ```
 
+### Playbook Unificado
+
+El playbook `test-connectivity.yml` consolida todas las operaciones:
+
+- **Tags disponibles**:
+  - `test` - Solo pruebas de conectividad (por defecto)
+  - `config` - Configuración común (timezone, paquetes)
+  - `webserver` - Configuración de servidores web
+  - `all` - Ejecuta todas las tareas
+
+- **Ejemplos de uso**:
+
+  ```bash
+  # Solo pruebas de conectividad
+  ansible-playbook -i inventories/dev playbooks/test-connectivity.yml --tags test
+
+  # Deploy completo
+  ansible-playbook -i inventories/dev playbooks/test-connectivity.yml --tags all
+
+  # Solo configuración
+  ansible-playbook -i inventories/dev playbooks/test-connectivity.yml --tags config
+  ```
+
+- **Con Docker Compose**:
+
+  ```bash
+  # Por defecto ejecuta solo tests
+  make dev-up
+
+  # Deploy completo
+  ANSIBLE_TAGS=all make dev-up
+  ```
+
 ### Añadir un playbook nuevo
+
+Si necesitas crear un playbook separado:
 
 1. Crear `ansible/playbooks/mi-playbook.yml`
 2. Probar localmente:
@@ -288,7 +322,7 @@ job:
   ttlSecondsAfterFinished: 86400 # 24h audit trail
 ansible:
   inventory: inventories/prod
-  playbook: playbooks/site.yml
+  playbook: playbooks/test-connectivity.yml
 ```
 
 ### Añadir una variable nueva al chart
