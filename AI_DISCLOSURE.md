@@ -1,8 +1,8 @@
 # AI Content Disclosure (EU AI Act Art.50)
 
-**Last Updated**: 2026-03-01T14:15:41Z
-**Commit**: c2276a97c6a9c37fbead08ee4b07909ebdda3320
-**Workflow Run**: 22545195817
+**Last Updated**: 2026-03-01T16:05:13Z
+**Commit**: 0ad8410dc562aa0395fbddcfd76026b72216f699
+**Workflow Run**: 22547138251
 
 ## Purpose
 This repository uses AI-assisted code generation for development and maintenance tasks.
@@ -12,16 +12,14 @@ transparency in AI-generated content.
 ## Recent Changes (Last Commit)
 ### Modified files with potential AI assistance:
 
-- ansible/inventories/dev/hosts.yaml
-- docker-compose.ssh-lab.yml
-- docker/ssh-test-server/Dockerfile
-- docker/ssh-test-server/README.md
-- docker/ssh-test-server/entrypoint.sh
-- docs/ssh/0-ssh-basics.md
-- docs/ssh/01-ansible-ssh-principles.md
-- docs/ssh/02-docker-ansible-lab.md
-- docs/ssh/README.md
-- helm/ansible-job/values-prod.yaml
+- ansible/playbooks/test-connectivity.yml
+- docker/vpn/entrypoint.sh
+- docs/helm/01-deploy-helm-lab.md
+- helm/ansible-job/templates/configmap.yaml
+- helm/ansible-job/templates/job.yaml
+- helm/ansible-job/values-dev.yaml
+- helm/ansible-job/values-staging.yaml
+- helm/ansible-job/values.yaml
 
 ## Repository Overview
 
@@ -29,7 +27,7 @@ transparency in AI-generated content.
 - `.yaml` files: 21
 - `.yml` files: 14
 - `.sh` files: 9
-- `.md` files: 11
+- `.md` files: 12
 - `.tpl` files: 1
 - `.cfg` files: 1
 - `Dockerfile` files: 5
