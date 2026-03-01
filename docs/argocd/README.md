@@ -721,8 +721,8 @@ ArgoCD sincronizará automáticamente la nueva configuración.
 **NUNCA comittees Secrets en texto plano.** Este proyecto usa:
 
 - **Dev:** Secrets manuales en el clúster (`kubectl create secret`)
-- **Staging:** External Secrets Operator + HashiCorp Vault
-- **Prod:** External Secrets Operator + AWS Secrets Manager
+- **Staging:** External Secrets Operator + HashiCorp Vault (ver [docs/vault/README.md](../vault/README.md))
+- **Prod:** External Secrets Operator + HashiCorp Vault (ver [docs/vault/README.md](../vault/README.md))
 
 Ver [k8s/external-secrets/](../../k8s/external-secrets/) para la configuración de staging/prod.
 
@@ -886,6 +886,7 @@ kubectl get secrets -n ansible-jobs-dev \
 ## Referencias
 
 ### ArgoCD y Helm
+
 - [argocd/apps/dev.yaml](../../argocd/apps/dev.yaml) — Application ArgoCD del entorno dev
 - [argocd/app-of-apps.yaml](../../argocd/app-of-apps.yaml) — Bootstrap App-of-Apps
 - [helm/ansible-job/values-dev.yaml](../../helm/ansible-job/values-dev.yaml) — Valores Helm dev
@@ -893,5 +894,7 @@ kubectl get secrets -n ansible-jobs-dev \
 - [docs/helm/01-deploy-helm-lab.md](../helm/01-deploy-helm-lab.md) — Despliegue con Helm directo (sin ArgoCD)
 
 ### Gestión de Secretos
-- [docs/vault/README.md](../vault/README.md) — Guía completa de HashiCorp Vault para staging
+
+- [docs/vault/README.md](../vault/README.md) — Guía completa de HashiCorp Vault para staging y prod
+- [docs/aws-secrets-manager/README.md](../aws-secrets-manager/README.md) — Guía de referencia de AWS Secrets Manager (no se usa actualmente)
 - [k8s/external-secrets/](../../k8s/external-secrets/) — Manifests de ExternalSecrets para staging/prod
