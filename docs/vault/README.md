@@ -41,13 +41,17 @@ flowchart LR
 | ----------- | --------------------- | ---------------------- | ----------------- |
 | **Dev**     | Kubernetes Secrets    | `ansible-jobs-dev`     | `kubectl create`  |
 | **Staging** | HashiCorp Vault KV v2 | `ansible-jobs-staging` | Vault CLI + ESO   |
-| **Prod**    | AWS Secrets Manager   | `ansible-jobs-prod`    | AWS Console + ESO |
+| **Prod**    | HashiCorp Vault KV v2 | `ansible-jobs-prod`    | Vault CLI + ESO   |
 
 ### Estructura de Secretos
 
 ```
 ansible-vpn/          (KV v2 mount point)
-└── staging/
+├── staging/
+│   ├── wireguard-config   → { "wg0.conf": "<WireGuard config completo>" }
+│   ├── vault-password     → { "vault-password": "<contraseña ansible-vault>" }
+│   └── ssh-key            → { "ssh-private-key": "<clave SSH privada PEM>" }
+└── prod/
     ├── wireguard-config   → { "wg0.conf": "<WireGuard config completo>" }
     ├── vault-password     → { "vault-password": "<contraseña ansible-vault>" }
     └── ssh-key            → { "ssh-private-key": "<clave SSH privada PEM>" }
