@@ -1,8 +1,8 @@
 # AI Content Disclosure (EU AI Act Art.50)
 
-**Last Updated**: 2026-03-01T11:19:12Z
-**Commit**: b7bc5a643f8f15382b83cd0b11e428b89cc742e0
-**Workflow Run**: 22542314675
+**Last Updated**: 2026-03-01T14:15:41Z
+**Commit**: c2276a97c6a9c37fbead08ee4b07909ebdda3320
+**Workflow Run**: 22545195817
 
 ## Purpose
 This repository uses AI-assisted code generation for development and maintenance tasks.
@@ -12,19 +12,27 @@ transparency in AI-generated content.
 ## Recent Changes (Last Commit)
 ### Modified files with potential AI assistance:
 
-- AI_DISCLOSURE.md
+- ansible/inventories/dev/hosts.yaml
+- docker-compose.ssh-lab.yml
+- docker/ssh-test-server/Dockerfile
+- docker/ssh-test-server/README.md
+- docker/ssh-test-server/entrypoint.sh
+- docs/ssh/0-ssh-basics.md
+- docs/ssh/01-ansible-ssh-principles.md
+- docs/ssh/02-docker-ansible-lab.md
+- docs/ssh/README.md
 - helm/ansible-job/values-prod.yaml
 
 ## Repository Overview
 
 ### All code files in repository:
-- `.yaml` files: 22
-- `.yml` files: 13
-- `.sh` files: 8
-- `.md` files: 9
+- `.yaml` files: 21
+- `.yml` files: 14
+- `.sh` files: 9
+- `.md` files: 11
 - `.tpl` files: 1
 - `.cfg` files: 1
-- `Dockerfile` files: 4
+- `Dockerfile` files: 5
 
 ## Compliance Notes
 
