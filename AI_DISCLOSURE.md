@@ -1,9 +1,8 @@
 # AI Content Disclosure (EU AI Act Art.50)
 
-
-**Last Updated**: 2026-03-01T09:50:12Z
-**Commit**: 27dbd8585f3de76b9489c855249bb32231ac15f7
-**Workflow Run**: 22540850819
+**Last Updated**: 2026-03-01T11:19:12Z
+**Commit**: b7bc5a643f8f15382b83cd0b11e428b89cc742e0
+**Workflow Run**: 22542314675
 
 ## Purpose
 This repository uses AI-assisted code generation for development and maintenance tasks.
@@ -13,45 +12,8 @@ transparency in AI-generated content.
 ## Recent Changes (Last Commit)
 ### Modified files with potential AI assistance:
 
-- .github/workflows/ai-disclosure.yaml
-- .github/workflows/argocd-sync.yml
-- .github/workflows/build-push.yml
-- .github/workflows/ci-ai-compliance.yaml
 - AI_DISCLOSURE.md
-- DEVELOPER.md
-- README.md
-- ansible/inventories/dev/hosts.ini
-- ansible/inventories/dev/hosts.yaml
-- ansible/inventories/dev/hosts.yml
-- ansible/inventories/prod/hosts.ini
-- ansible/inventories/prod/hosts.yaml
-- ansible/inventories/staging/hosts.ini
-- ansible/inventories/staging/hosts.yaml
-- argocd/app-of-apps.yaml
-- argocd/apps/dev.yaml
-- argocd/apps/prod.yaml
-- argocd/apps/staging.yaml
-- docker-compose.vpn-lab.yml
-- docker-compose.yml
-- docker/remote-host/Dockerfile
-- docker/remote-host/entrypoint.sh
-- docker/vpn-server/Dockerfile
-- docker/vpn-server/entrypoint.sh
-- docker/vpn-server/healthcheck.sh
-- docker/vpn/entrypoint.sh
-- docs/ssh/01-ansible-ssh-principles.md
-- docs/ssh/02-docker-ansible-lab.md
-- docs/ssh/03-ssh-vpn-basics.md
-- docs/ssh/04-vpn-tunnel-lab.md
-- docs/ssh/05-ssh-params-reference.md
-- docs/ssh/README.md
-- helm/ansible-job/Chart.yaml
-- helm/ansible-job/values.yaml
-- k8s/external-secrets/dev-external-secret.yaml
-- k8s/external-secrets/secret-store-aws.yaml
-- k8s/external-secrets/secret-store-vault.yaml
-- k8s/external-secrets/staging-external-secret.yaml
-- test/vpn-lab/setup.sh
+- helm/ansible-job/values-prod.yaml
 
 ## Repository Overview
 
