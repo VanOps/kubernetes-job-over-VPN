@@ -1,0 +1,26 @@
+# ── Production Environment Inventory ───────────────────────────────────
+# VPN subnet: 10.30.0.0/24  (WireGuard wg0)
+# ALL prod changes require manual ArgoCD approval gate.
+
+all:
+  vars:
+    ansible_user: ansible
+    ansible_python_interpreter: /usr/bin/python3
+    environment: prod
+  children:
+    prod_servers:
+      children:
+        prod_web:
+          hosts:
+            prod-web-01:
+              ansible_host: 10.30.0.11
+            prod-web-02:
+              ansible_host: 10.30.0.12
+            prod-web-03:
+              ansible_host: 10.30.0.13
+        prod_db:
+          hosts:
+            prod-db-01:
+              ansible_host: 10.30.0.21
+            prod-db-02:
+              ansible_host: 10.30.0.22

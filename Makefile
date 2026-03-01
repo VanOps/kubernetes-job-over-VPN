@@ -207,12 +207,27 @@ k8s-secrets-dev: ## Create K8s secrets in dev namespace (initial testing, no Ext
 	  -n ansible-jobs-dev --dry-run=client -o yaml | kubectl apply -f -
 	@echo "Secrets created in ansible-jobs-dev ✓"
 
-.PHONY: k8s-apply-external-secrets
-k8s-apply-external-secrets: ## Apply ExternalSecrets resources (requires ESO installed)
-	kubectl apply -f k8s/external-secrets/secret-store.yaml
-	kubectl apply -f k8s/external-secrets/dev-external-secret.yaml
+.PHONY: k8s-secrets-vault-token
+k8s-secrets-vault-token: ## Crear secret vault-token en ns external-secrets (auth ESO→Vault para staging)
+	@test -n "$(VAULT_TOKEN)" || (echo "ERROR: usa: make k8s-secrets-vault-token VAULT_TOKEN=hvs.XXXX"; exit 1)
+	kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
+	kubectl create secret generic vault-token \
+	  --from-literal=token=$(VAULT_TOKEN) \
+	  -n external-secrets --dry-run=client -o yaml | kubectl apply -f -
+	@echo "vault-token creado en external-secrets ✓"
+
+.PHONY: k8s-apply-external-secrets-staging
+k8s-apply-external-secrets-staging: ## Aplicar Vault ClusterSecretStore + ExternalSecrets de staging (requiere vault-token)
+	kubectl apply -f k8s/external-secrets/secret-store-vault.yaml
 	kubectl apply -f k8s/external-secrets/staging-external-secret.yaml
+
+.PHONY: k8s-apply-external-secrets-prod
+k8s-apply-external-secrets-prod: ## Aplicar AWS ClusterSecretStore + ExternalSecrets de prod (requiere IRSA)
+	kubectl apply -f k8s/external-secrets/secret-store-aws.yaml
 	kubectl apply -f k8s/external-secrets/prod-external-secret.yaml
+
+.PHONY: k8s-apply-external-secrets
+k8s-apply-external-secrets: k8s-apply-external-secrets-staging k8s-apply-external-secrets-prod ## Aplicar todos los recursos ESO (staging + prod)
 
 .PHONY: k8s-watch-dev
 k8s-watch-dev: ## Watch Jobs in dev namespace
