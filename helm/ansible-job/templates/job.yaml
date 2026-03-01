@@ -120,6 +120,42 @@ spec:
             {{- toYaml .Values.resources.gitSync | nindent 12 }}
         {{- end }}
 
+        {{- if .Values.releaseArtifact.enabled }}
+        # ── Init 1b: artifact-download (prod alternative to git-sync) ──
+        # Downloads the versioned ansible/ tarball from GitHub Release and
+        # extracts it to /ansible-workspace/ansible/ (ready for ansible-executor).
+        - name: artifact-download
+          image: "{{ .Values.releaseArtifact.image.repository }}:{{ .Values.releaseArtifact.image.tag }}"
+          imagePullPolicy: {{ .Values.releaseArtifact.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Downloading ansible artifact: ${ARTIFACT_URL}"
+              wget -qO /tmp/ansible.tar.gz "${ARTIFACT_URL}"
+              echo "Extracting to /ansible-workspace..."
+              tar -xzf /tmp/ansible.tar.gz -C /ansible-workspace
+              echo "Contents:"
+              ls /ansible-workspace/ansible/
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: ARTIFACT_URL
+              value: {{ .Values.releaseArtifact.url | quote }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: ansible-workspace
+              mountPath: /ansible-workspace
+          resources:
+            {{- toYaml .Values.resources.gitSync | nindent 12 }}
+        {{- end }}
+
         # ── Init 2: vpn-sidecar (native sidecar — stays running) ─────
         # restartPolicy: Always makes this a K8s 1.28+ native sidecar.
         # WireGuard wg0 interface is visible to ALL containers in the Pod
@@ -183,10 +219,14 @@ spec:
           securityContext:
             {{- toYaml .Values.securityContext.ansible | nindent 12 }}
           volumeMounts:
-            # Ansible workspace: repo cloned by git-sync
+            # Ansible workspace: git-sync (dev/staging) or release artifact (prod)
             - name: ansible-workspace
               mountPath: /ansible
+              {{- if .Values.releaseArtifact.enabled }}
+              subPath: ansible
+              {{- else }}
               subPath: "current/{{ .Values.gitSync.subPath }}"
+              {{- end }}
               readOnly: true
             # ansible.cfg override from ConfigMap
             - name: ansible-cfg

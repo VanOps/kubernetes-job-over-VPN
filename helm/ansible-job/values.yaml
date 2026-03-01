@@ -51,6 +51,7 @@ ansible:
   #   value: "1.2.3"
 
 # ── Git Sync (clones Ansible monorepo into the Pod) ───────────────────
+# Used in dev/staging. In prod, use releaseArtifact instead.
 gitSync:
   enabled: true
   image:
@@ -64,6 +65,20 @@ gitSync:
   subPath: ansible
   # Mount point inside the Ansible executor container
   mountPath: /ansible
+
+# ── Release Artifact (downloads packaged ansible/ from GitHub Release) ─
+# Use in prod instead of gitSync for immutable, versioned deployments.
+# Mutually exclusive with gitSync: set gitSync.enabled=false when using this.
+# The tarball is produced by the "Release Ansible Package" GitHub workflow
+# and attached to each tagged GitHub Release as ansible-playbooks-vX.Y.Z.tar.gz
+releaseArtifact:
+  enabled: false
+  # Full URL to the release asset — updated automatically by the release workflow
+  url: ""
+  image:
+    repository: alpine
+    tag: "3.21"
+    pullPolicy: IfNotPresent
 
 # ── Job Configuration ─────────────────────────────────────────────────
 job:
