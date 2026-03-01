@@ -74,8 +74,8 @@ graph TB
 
 ```mermaid
 flowchart LR
-    subgraph AWS["☁ AWS"]
-        SM["Secrets Manager\nansible-vpn/ENV/wireguard-config\nansible-vpn/ENV/vault-password\nansible-vpn/ENV/ssh-key"]
+    subgraph VAULT["🔐 HashiCorp Vault"]
+        KV["KV v2: ansible-vpn/\nstaging/* y prod/*"]
     end
 
     subgraph K8S["☸ Kubernetes"]
@@ -95,12 +95,12 @@ flowchart LR
         VAULT_LOCAL["ansible-vault local\n+ kubectl create secret"]
     end
 
-    SM -->|"IRSA / OIDC\nrefreshInterval: 1h"| ESO
+    KV -->|"Token Auth\nrefreshInterval: 30m-12h"| ESO
     ESO --> S1
     ESO --> S2
     ESO --> S3
 
-    FALLBACK -.->|"sustituido por ESO en prod"| K8S
+    FALLBACK -.->|"sustituido por ESO en staging/prod"| K8S
 ```
 
 ### 4. Políticas de Sync por Entorno
@@ -322,7 +322,7 @@ ansible-vault encrypt ansible/vault/secrets.yml
 make k8s-secrets-dev
 ```
 
-### 6. Secretos — Producción (ExternalSecrets + AWS)
+### 6. Secretos — Staging/Producción (ExternalSecrets + Vault)
 
 ```bash
 # Instalar ESO
@@ -330,12 +330,19 @@ helm repo add external-secrets https://charts.external-secrets.io
 helm install external-secrets external-secrets/external-secrets \
   -n external-secrets --create-namespace
 
-# Crear secretos en AWS SM:
-# ansible-vpn/ENV/wireguard-config → { "wg0.conf": "<contenido>" }
-# ansible-vpn/ENV/vault-password   → { "vault-password": "<pass>" }
-# ansible-vpn/ENV/ssh-key          → { "ssh-private-key": "<PEM>" }
+# Crear secretos en Vault:
+vault kv put ansible-vpn/prod/wireguard-config wg0.conf=@test/vpn/wg0.conf
+vault kv put ansible-vpn/prod/vault-password vault-password=@test/secrets/vault-password
+vault kv put ansible-vpn/prod/ssh-key ssh-private-key=@test/secrets/ssh-private-key
 
-make k8s-apply-external-secrets
+# Crear token y vault-token Secret
+vault token create -policy=eso-prod-policy -period=768h
+kubectl create secret generic vault-token \
+  --from-literal=token='<VAULT_TOKEN>' \
+  -n ansible-jobs-prod
+
+# Aplicar ClusterSecretStore y ExternalSecrets
+make k8s-apply-external-secrets-prod
 ```
 
 ---
@@ -453,7 +460,6 @@ Ver [**docs/ssh/README.md**](docs/ssh/README.md) para documentación completa.
 
 Documentación completa para configurar **HashiCorp Vault** como backend de secretos en el entorno de **staging**.
 
-
 📖 [**docs/vault/README.md**](docs/vault/README.md) — Guía completa de Vault para staging:
 
 - KV v2 mount point: `ansible-vpn`
@@ -489,10 +495,25 @@ Ver [**docs/vault/README.md**](docs/vault/README.md) para documentación complet
 
 ---
 
+📖 [**docs/aws-secrets-manager/README.md**](docs/aws-secrets-manager/README.md) — Guía completa de AWS Secrets Manager (referencia - no se usa actualmente):
+
+- Configuración de AWS Secrets Manager y región
+- IAM Policies y IRSA (IAM Roles for Service Accounts)
+- Quick Start y configuración paso a paso
+- External Secrets Operator integration con EKS
+- Comandos AWS CLI esenciales
+- Actualización, rotación automática y versionado
+- Troubleshooting de permisos IRSA
+- Estimación de costos
+
+> **Nota:** Este proyecto actualmente usa **HashiCorp Vault** tanto para staging como para producción. La documentación de AWS Secrets Manager se mantiene como referencia para posibles implementaciones futuras.
+
+---
+
 ## Seguridad
 
 - `test/vpn/wg0.conf`, `test/secrets/vault-password`, `test/secrets/ssh-private-key` están en `.gitignore`
 - Solo commitear `ansible/vault/secrets.yml` **cifrado** con ansible-vault
-- En producción: todos los secretos desde AWS Secrets Manager vía ExternalSecrets (IRSA)
+- En staging y producción: todos los secretos desde HashiCorp Vault vía ExternalSecrets (Token Auth)
 - Contenedor Ansible: usuario no-root UID 1000, capabilities: DROP ALL
 - VPN sidecar: solo `NET_ADMIN + SYS_MODULE`, sin root UID

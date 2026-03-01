@@ -316,8 +316,7 @@ k8s-apply-external-secrets-staging: ## Aplicar Vault ClusterSecretStore + Extern
 	kubectl apply -f k8s/external-secrets/staging-external-secret.yaml
 
 .PHONY: k8s-apply-external-secrets-prod
-k8s-apply-external-secrets-prod: ## Aplicar AWS ClusterSecretStore + ExternalSecrets de prod (requiere IRSA)
-	kubectl apply -f k8s/external-secrets/secret-store-aws.yaml
+k8s-apply-external-secrets-prod: ## Aplicar Vault ExternalSecrets de prod (requiere vault-token y política prod)
 	kubectl apply -f k8s/external-secrets/prod-external-secret.yaml
 
 .PHONY: k8s-apply-external-secrets
