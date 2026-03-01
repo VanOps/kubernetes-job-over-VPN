@@ -178,43 +178,46 @@ wg --version              # WireGuard tools
 git clone https://github.com/YOURORG/kubernetes-job-over-VPN.git
 cd kubernetes-job-over-VPN
 
-# Setup Lab 1
-make lab1-setup
+# Generar claves SSH (necesario la primera vez)
+make lab-setup
 
-# Levantar containers
-make lab1-up
+# Levantar containers SSH
+make ssh-lab-up
 
-# Ejecutar playbook test
-make lab1-test
+# Test de conexión SSH manual
+make ssh-test-connection
 
-# Shell interactivo
-make lab1-shell
+# Test Ansible ping
+make ssh-test-ansible
+
+# Shell interactivo en el cliente SSH
+make ssh-lab-shell
 ```
 
 ### Lab 2: VPN Tunnel Advanced
 
 ```bash
 # Setup Lab 2 (genera claves WireGuard + SSH)
-make lab2-setup
+make lab-setup
 
-# Levantar VPN + Ansible stack
-make lab2-up
+# Levantar VPN + remote-host
+make lab-up
 
 # Test conectividad SSH sobre VPN
-make lab2-test-ssh
+make lab-test
 
-# Ejecutar playbook Ansible
-make lab2-ansible
+# Shell en remote-host (host destino Ansible)
+make lab-shell
 
-# Shell en ansible-control
-make lab2-shell-ansible
+# Shell en contenedor Ansible (para ejecutar playbooks)
+make dev-shell
 
 # Ver logs
-make lab2-logs
+make lab-logs
 
 # Limpiar
-make lab2-down
-make lab2-clean
+make lab-down
+make lab-clean
 ```
 
 ---
@@ -223,29 +226,30 @@ make lab2-clean
 
 ### Lab 1 (Docker SSH Basic)
 
-| Comando           | Descripción                          |
-| ----------------- | ------------------------------------ |
-| `make lab1-setup` | Setup inicial (genera SSH keys)      |
-| `make lab1-up`    | Inicia containers                    |
-| `make lab1-test`  | Ejecuta playbook de test             |
-| `make lab1-shell` | Shell interactivo en ansible-control |
-| `make lab1-down`  | Para containers                      |
-| `make lab1-clean` | Limpia todo (keys + containers)      |
-| `make lab1-logs`  | Sigue logs en tiempo real            |
+| Comando                    | Descripción                                       |
+| -------------------------- | ------------------------------------------------- |
+| `make lab-setup`           | Setup inicial (genera SSH keys, ejecutar una vez) |
+| `make ssh-lab-up`          | Inicia containers (servidor + cliente SSH)        |
+| `make ssh-test-connection` | Test de conexión SSH manual                       |
+| `make ssh-test-ansible`    | Test Ansible ping module                          |
+| `make ssh-lab-shell`       | Shell interactivo en ssh-client                   |
+| `make ssh-lab-down`        | Para containers                                   |
+| `make ssh-lab-reset`       | Reinicia containers (down + up)                   |
+| `make ssh-lab-logs`        | Sigue logs en tiempo real                         |
 
 ### Lab 2 (VPN Tunnel Advanced)
 
-| Comando                   | Descripción                                     |
-| ------------------------- | ----------------------------------------------- |
-| `make lab2-setup`         | Setup completo (SSH + WireGuard keys + configs) |
-| `make lab2-up`            | Inicia stack completo (VPN + Ansible)           |
-| `make lab2-test-ssh`      | Script test conectividad                        |
-| `make lab2-ansible`       | Ejecuta playbook Ansible                        |
-| `make lab2-shell-ansible` | Shell en ansible-control                        |
-| `make lab2-shell-vpn`     | Shell en vpn-client (debug)                     |
-| `make lab2-down`          | Para todos los servicios                        |
-| `make lab2-clean`         | Limpia todo (keys + configs + containers)       |
-| `make lab2-logs`          | Logs combinados en tiempo real                  |
+| Comando              | Descripción                                     |
+| -------------------- | ----------------------------------------------- |
+| `make lab-setup`     | Setup completo (SSH + WireGuard keys + configs) |
+| `make lab-up`        | Inicia stack completo (VPN server + remote-host)|
+| `make lab-test`      | Test conectividad VPN (ping through WireGuard)  |
+| `make lab-shell`     | Shell en remote-host (host destino Ansible)     |
+| `make dev-shell`     | Shell en contenedor Ansible (ejecutar playbooks)|
+| `make lab-vpn-status`| Estado WireGuard (`wg show`)                    |
+| `make lab-down`      | Para todos los servicios                        |
+| `make lab-clean`     | Limpia todo (keys + configs + containers)       |
+| `make lab-logs`      | Logs combinados en tiempo real                  |
 
 ---
 
@@ -266,7 +270,7 @@ Todos los documentos incluyen **diagramas Mermaid editables** visualizando:
 ### Nivel 1: Fundamentos (1-2 horas)
 
 1. Leer [01-ansible-ssh-principles.md](01-ansible-ssh-principles.md)
-2. Ejecutar Lab 1: `make lab1-up && make lab1-test`
+2. Ejecutar Lab 1: `make ssh-lab-up && make ssh-test-connection`
 3. Experimentar con variables Ansible en inventory
 
 **Objetivo**: Entender flujo SSH básico de Ansible
@@ -286,8 +290,8 @@ Todos los documentos incluyen **diagramas Mermaid editables** visualizando:
 ### Nivel 3: Hands-On VPN Lab (3-4 horas)
 
 1. Leer [04-vpn-tunnel-lab.md](04-vpn-tunnel-lab.md)
-2. Ejecutar Lab 2 completo: `make lab2-setup && make lab2-up`
-3. Analizar logs WireGuard: `docker exec lab2-vpn-client wg show`
+2. Ejecutar Lab 2 completo: `make lab-setup && make lab-up`
+3. Analizar estado WireGuard: `make lab-vpn-status`
 4. Hacer ejercicios avanzados (latency simulation, multi-subnet)
 
 **Objetivo**: Dominar troubleshooting VPN + Ansible

@@ -85,6 +85,10 @@ kubernetes-job-over-VPN/
 │   ├── remote-host/             # Debian SSH target (lab)
 │   │   ├── Dockerfile           # openssh-server + usuario ansible
 │   │   └── entrypoint.sh        # instala authorized_keys + sshd
+│   ├── ssh-test-server/         # servidor SSH genérico para tests básicos
+│   │   ├── Dockerfile
+│   │   ├── entrypoint.sh
+│   │   └── README.md
 │   └── ansible/
 │       ├── Dockerfile
 │       ├── scripts/
@@ -111,8 +115,9 @@ kubernetes-job-over-VPN/
 │   └── secrets/
 │       ├── ssh-private-key      # clave SSH Ansible (generada)
 │       └── ssh-public-key       # montada en remote-host (generada)
-├── docker-compose.yml           # stack completo (profile vpn-lab)
-└── docker-compose.vpn-lab.yml   # lab standalone: solo server + remote-host
+├── docker-compose.yml           # stack completo (profiles: vpn-lab, run, dev)
+├── docker-compose.vpn-lab.yml   # lab standalone: solo server + remote-host
+└── docker-compose.ssh-lab.yml   # lab SSH simple sin VPN (ssh-server + ssh-client)
 ```
 
 ---
@@ -148,7 +153,7 @@ make lab-down          # para los containers
 Simula el Job de Kubernetes completo de forma local:
 
 ```bash
-SKIP_VPN=false docker compose --profile vpn-lab up
+SKIP_VPN=false docker compose --profile vpn-lab --profile run up
 ```
 
 Esto arranca en orden:
@@ -185,7 +190,7 @@ sequenceDiagram
     participant VPN as vpn-sidecar
     participant ANS as ansible-run
 
-    Note over DC: docker compose --profile vpn-lab up
+    Note over DC: docker compose --profile vpn-lab --profile run up
 
     DC->>WGS: Start (NET_ADMIN, /dev/net/tun)
     WGS->>WGS: wg-quick up wg0 (server 10.10.99.1)
