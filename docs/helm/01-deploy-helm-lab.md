@@ -51,14 +51,23 @@ graph TB
 
 ## 2. Requisitos previos
 
-| Herramienta              | Versión mínima         | Verificación             |
-| ------------------------ | ---------------------- | ------------------------ |
-| Kubernetes               | 1.28+ (sidecar nativo) | `kubectl version`        |
-| Helm                     | 3.x                    | `helm version`           |
-| Docker + Compose         | 24+ / v2               | `docker compose version` |
-| `wg` / `wireguard-tools` | cualquiera             | `which wg`               |
+| Herramienta              | Versión mínima                     | Verificación             |
+| ------------------------ | ---------------------------------- | ------------------------ |
+| Kubernetes               | 1.28+ (ver nota de compatibilidad) | `kubectl version`        |
+| Helm                     | 3.x                                | `helm version`           |
+| Docker + Compose         | 24+ / v2                           | `docker compose version` |
+| `wg` / `wireguard-tools` | cualquiera                         | `which wg`               |
 
-> **Kubernetes 1.28+ es obligatorio.** El chart usa `restartPolicy: Always` en el sidecar vpn, que requiere la API de [sidecar containers nativa](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/) de K8s 1.28.
+> **Compatibilidad de Kubernetes y `sidecarMode`:**
+>
+> El chart soporta dos modos de ejecución del sidecar VPN, controlados por `vpn.sidecarMode`:
+>
+> | `sidecarMode` | Comportamiento | Requisito K8s |
+> |---|---|---|
+> | `"true"` (por defecto) | El sidecar usa `restartPolicy: Always` — [sidecar container nativo](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/). El sidecar VPN se mantiene activo durante toda la vida del Job. | K8s 1.28+ (vanilla) / K8s 1.29+ (EKS) |
+> | `"false"` | El sidecar levanta WireGuard y termina su proceso principal. Compatible con clusters que no implementan la API nativa de sidecars (EKS 1.28 y anteriores). | K8s 1.27+ |
+>
+> Los valores de entorno ya reflejan esto: `values-dev.yaml` establece `sidecarMode: "false"` para compatibilidad con EKS 1.28.
 
 ### Cluster Kubernetes — opciones
 
@@ -349,23 +358,26 @@ helm upgrade --install ansible-job-dev helm/ansible-job/ \
 environment: dev
 vpn:
   image:
-    tag: "latest" # imagen del sidecar WireGuard
-  secretName: vpn-wireguard-config # debe coincidir con el Secret del Paso 4
+    tag: "latest"       # imagen del sidecar WireGuard
+  secretName: vpn-wireguard-config  # debe coincidir con el Secret del Paso 4
+  sidecarMode: "false"  # EKS 1.28: no soporta sidecars nativos; "true" para K8s 1.28+ vanilla
 
 ansible:
   image:
     tag: "latest"
-  playbook: playbooks/test-connectivity.yml # playbook de prueba
-  inventory: inventories/dev # apunta a 10.10.20.10 (remote-host)
-  verbosity: 2 # logs detallados para dev
+  playbook: playbooks/test-connectivity.yml  # playbook de prueba
+  inventory: inventories/dev                 # apunta a 10.10.20.10 (remote-host)
+  verbosity: 2                               # logs detallados para dev
 
 gitSync:
-  branch: develop # rama que clonar (el repo en GitHub)
+  branch: develop  # rama que clonar (el repo en GitHub)
 
 job:
-  backoffLimit: 3 # reintentos ante fallo
-  activeDeadlineSeconds: 900 # 15 min máximo
+  backoffLimit: 3           # reintentos ante fallo
+  activeDeadlineSeconds: 900  # 15 min máximo
 ```
+
+> **`sidecarMode`:** Con `"false"`, el init-container VPN levanta WireGuard y termina. El túnel permanece activo en el namespace de red compartido del pod. Usa `"true"` si tu cluster soporta la API nativa de sidecars (K8s 1.28+ vanilla o K8s 1.29+ EKS).
 
 ---
 
@@ -384,7 +396,7 @@ kubectl get pods -n ansible-jobs-dev -o wide
 
 ### 6b. Logs del sidecar VPN (init container)
 
-El sidecar vpn debe aparecer como `Running` con el startup probe pasado:
+El sidecar vpn debe aparecer como `Running` (o `Completed` si `sidecarMode: "false"`):
 
 ```bash
 make k8s-logs-vpn-dev
@@ -467,10 +479,11 @@ make lab-clean
 
 ## 10. Troubleshooting
 
-### El sidecar VPN no levanta — startup probe falla
+### El sidecar VPN no levanta
 
 ```bash
 kubectl describe pod <pod-name> -n ansible-jobs-dev | grep -A 20 "vpn-sidecar"
+kubectl logs <pod-name> -n ansible-jobs-dev -c vpn-sidecar
 ```
 
 **Causa más común:** el endpoint del `wg0.conf` no es alcanzable desde el pod.
