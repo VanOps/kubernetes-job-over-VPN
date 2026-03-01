@@ -17,7 +17,7 @@ registryOwner: OWNER # replaced by CI: github.repository_owner
 # ── VPN Sidecar (WireGuard) ───────────────────────────────────────────
 vpn:
   image:
-    repository: ghcr.io/VanOps/k8s-vpn-sidecar
+    repository: ghcr.io/vanops/k8s-vpn-sidecar
     tag: "latest" # updated by CI to git SHA on each push
     pullPolicy: IfNotPresent
   interface: wg0
@@ -26,11 +26,14 @@ vpn:
   # Production:      synced by ExternalSecrets from AWS Secrets Manager
   secretName: vpn-wireguard-config
   monitorInterval: "10" # seconds between interface health checks
+  # true  → stay alive as native sidecar (K8s 1.29+ / vanilla 1.28 with feature gate)
+  # false → exit after wg-quick up (plain init container, EKS 1.28 and below)
+  sidecarMode: "true"
 
 # ── Ansible Executor ──────────────────────────────────────────────────
 ansible:
   image:
-    repository: ghcr.io/VanOps/k8s-ansible-executor
+    repository: ghcr.io/vanops/k8s-ansible-executor
     tag: "latest" # updated by CI
     pullPolicy: IfNotPresent
   # Relative paths inside the cloned repo
@@ -112,6 +115,7 @@ resources:
 securityContext:
   pod:
     runAsNonRoot: false # VPN sidecar needs NET_ADMIN (may need root-adjacent)
+    fsGroup: 1000        # secret volumes are group-owned by ansible GID → 0440 readable
     seccompProfile:
       type: RuntimeDefault
   vpn:

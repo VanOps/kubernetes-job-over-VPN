@@ -4,15 +4,17 @@ environment: dev
 
 vpn:
   image:
-    tag: "latest"   # CI updates this to the git SHA on every develop push
+    tag: "latest" # CI updates this to the git SHA on every develop push
+    pullPolicy: Always  # force re-pull during dev; remove once image tag is pinned to a SHA
   secretName: vpn-wireguard-config
+  sidecarMode: "false" # EKS 1.28: no native sidecar support; one-shot init mode
 
 ansible:
   image:
-    tag: "latest"
+    tag: "dca96a2"
   playbook: playbooks/test-connectivity.yml
   inventory: inventories/dev
-  verbosity: 2     # verbose in dev for easier debugging
+  verbosity: 2 # verbose in dev for easier debugging
   extraEnvVars:
     - name: APP_VERSION
       value: "dev-latest"
@@ -21,9 +23,9 @@ gitSync:
   branch: develop
 
 job:
-  ttlSecondsAfterFinished: 1800    # 30min – pods auto-cleaned quickly in dev
+  ttlSecondsAfterFinished: 1800 # 30min – pods auto-cleaned quickly in dev
   backoffLimit: 3
-  activeDeadlineSeconds: 900       # 15min max in dev
+  activeDeadlineSeconds: 900 # 15min max in dev
 
 serviceAccount:
   annotations: {}

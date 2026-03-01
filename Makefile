@@ -292,6 +292,12 @@ k8s-secrets-dev: ## Create K8s secrets in dev namespace (initial testing, no Ext
 	kubectl create secret generic ansible-ssh-key \
 	  --from-file=ssh-private-key=./test/secrets/ssh-private-key \
 	  -n ansible-jobs-dev --dry-run=client -o yaml | kubectl apply -f -
+	kubectl create secret docker-registry ghcr-credentials \
+		--docker-server=ghcr.io \
+		--docker-username=${GITHUB_USER} \
+		--docker-password=${GITHUB_PAT} \
+		-n ansible-jobs-dev
+	echo ${GITHUB_PAT} | docker login ghcr.io -u ${GITHUB_USER} --password-stdin
 	@echo "Secrets created in ansible-jobs-dev ✓"
 
 .PHONY: k8s-secrets-vault-token

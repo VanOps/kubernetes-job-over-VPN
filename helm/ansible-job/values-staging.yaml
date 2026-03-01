@@ -4,12 +4,12 @@ environment: staging
 
 vpn:
   image:
-    tag: "latest"   # CI updates on staging branch push
+    tag: "dca96a2" # CI updates on staging branch push
   secretName: vpn-wireguard-config
 
 ansible:
   image:
-    tag: "latest"
+    tag: "dca96a2"
   playbook: playbooks/site.yml
   inventory: inventories/staging
   verbosity: 1
@@ -21,9 +21,9 @@ gitSync:
   branch: staging
 
 job:
-  ttlSecondsAfterFinished: 7200    # 2h – keep pods for staging log inspection
+  ttlSecondsAfterFinished: 7200 # 2h – keep pods for staging log inspection
   backoffLimit: 2
-  activeDeadlineSeconds: 1800      # 30min
+  activeDeadlineSeconds: 1800 # 30min
 
 serviceAccount:
   annotations: {}

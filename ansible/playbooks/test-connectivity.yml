@@ -26,7 +26,7 @@
           - "  Python      : {{ ansible_python_version }}"
           - "  Uptime (s)  : {{ ansible_uptime_seconds }}"
           - "  Environment : {{ environment | default('unknown') }}"
-          - "  Timestamp   : {{ lookup('pipe', 'TZ=Europe/Madrid date +\"%Y-%m-%d %H:%M:%S %Z\"') }}"
+          - '  Timestamp   : {{ lookup(''pipe'', ''TZ=Europe/Madrid date +"%Y-%m-%d %H:%M:%S %Z"'') }}'
           - "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     - name: "NETWORK | Show all IPv4 addresses"
@@ -53,6 +53,13 @@
     - name: "DISK | Display disk info"
       ansible.builtin.debug:
         msg: "{{ disk_info.stdout_lines }}"
+
+    - name: "Grab file on /tmp to ensure process works over VPN"
+      ansible.builtin.command:
+        cmd: "echo 'VPN Connectivity Test' > /home/ansible/vpn_test.txt && cat /home/ansible/vpn_test.txt"
+      register: file_check
+      changed_when: false
+      ignore_errors: true
 
     - name: "SUMMARY | Connectivity test completed"
       ansible.builtin.debug:

@@ -22,6 +22,7 @@ data:
     fact_caching           = jsonfile
     fact_caching_connection = /tmp/ansible-facts
     fact_caching_timeout   = 86400
+    local_tmp              = /tmp/ansible-local-tmp
     remote_user            = ansible
     timeout                = 30
     vault_password_file    = /run/secrets/vault-password
