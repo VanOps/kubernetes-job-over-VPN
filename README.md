@@ -150,10 +150,8 @@ kubernetes-job-over-VPN/
 │   │   ├── staging/(hosts.ini + group_vars/all.yml)
 │   │   └── prod/   (hosts.ini + group_vars/all.yml)
 │   ├── playbooks/
-│   │   ├── test-connectivity.yml  # Playbook de prueba
-│   │   └── site.yml               # Playbook principal
-│   ├── roles/
-│   │   └── common/
+│   │   └── test-connectivity.yml  # Playbook unificado (test + deploy)
+│   ├── roles/                     # (opcional, tareas integradas en playbook)
 │   └── vault/
 │       └── secrets.yml.example
 │
@@ -448,6 +446,50 @@ make lab2-setup && make lab2-up && make lab2-ansible
 - ✅ 7+ ejercicios prácticos
 
 Ver [**docs/ssh/README.md**](docs/ssh/README.md) para documentación completa.
+
+---
+
+## 🔐 Gestión de Secretos — HashiCorp Vault
+
+Documentación completa para configurar **HashiCorp Vault** como backend de secretos en el entorno de **staging**.
+
+📖 [**docs/vault/**](docs/vault/README.md) — Configuración de Vault para staging:
+
+- **[01-vault-setup-staging.md](docs/vault/01-vault-setup-staging.md)** — Guía completa
+  - KV v2 mount point: `ansible-vpn`
+  - Políticas de acceso y generación de tokens
+  - External Secrets Operator integration
+  - Estructura de paths y versionado
+  - Comandos para crear los 3 secretos necesarios
+  - Troubleshooting y debug completo
+
+- **[vault-cheatsheet.md](docs/vault/vault-cheatsheet.md)** — Referencia rápida
+  - Comandos esenciales Vault CLI
+  - CRUD de secretos con versionado
+  - Integration con Kubernetes
+  - Debug y verificación
+
+### Quick Start Vault
+
+```bash
+# 1. Habilitar KV v2 y crear política
+vault secrets enable -path=ansible-vpn -version=2 kv
+vault policy write eso-staging-policy eso-staging-policy.hcl
+
+# 2. Crear los 3 secretos para staging
+vault kv put ansible-vpn/staging/wireguard-config wg0.conf=@test/vpn/wg0.conf
+vault kv put ansible-vpn/staging/vault-password vault-password="$(cat test/secrets/vault-password)"
+vault kv put ansible-vpn/staging/ssh-key ssh-private-key=@test/secrets/ssh-private-key
+
+# 3. Generar token y configurar en K8s
+vault token create -policy=eso-staging-policy -period=720h
+make k8s-secrets-vault-token VAULT_TOKEN=hvs.XXXX
+
+# 4. Aplicar ClusterSecretStore + ExternalSecrets
+make k8s-apply-external-secrets-staging
+```
+
+Ver [**docs/vault/README.md**](docs/vault/README.md) para documentación completa.
 
 ---
 

@@ -2,20 +2,8 @@
 # VPN subnet: 10.20.0.0/24  (WireGuard wg0)
 
 all:
-  vars:
-    ansible_user: ansible
-    ansible_python_interpreter: /usr/bin/python3
-    environment: staging
-  children:
-    staging_servers:
-      children:
-        staging_web:
-          hosts:
-            stg-web-01:
-              ansible_host: 10.20.0.11
-            stg-web-02:
-              ansible_host: 10.20.0.12
-        staging_db:
-          hosts:
-            stg-db-01:
-              ansible_host: 10.20.0.21
+  hosts:
+    remote-dev:
+      ansible_host: 10.10.20.10
+      ansible_user: ansible
+      ansible_port: 22

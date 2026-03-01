@@ -4,16 +4,18 @@
 #
 # ArgoCD Hook Pattern:
 #   PostSync         → Job runs AFTER ConfigMaps/Secrets/SA/RBAC are synced
-#   BeforeHookCreation → Previous Job deleted before creating new one
 #   sync-wave "1"    → Explicit ordering (wave 0 = infra, wave 1 = job)
+#   No delete policy → Jobs persist for audit/debugging
 #
 # Pod Architecture (all containers share the same network namespace):
 #   [init] git-sync        → Clones Ansible monorepo into emptyDir volume
-#   [sidecar] vpn-sidecar  → WireGuard wg0 tunnel (stays alive, K8s 1.28+)
+#   [init] vpn-sidecar     → WireGuard wg0 tunnel
+#                            sidecarMode=true  → stays alive (K8s 1.29+ / vanilla 1.28)
+#                            sidecarMode=false → exits after wg-quick up (EKS 1.28)
 #   [main] ansible-executor → Runs playbook over VPN tunnel
 #
-# Requires Kubernetes ≥ 1.28 for native sidecar (initContainer.restartPolicy: Always)
-# EKS: supported from K8s 1.29 on managed node groups
+# Native sidecar (restartPolicy: Always) requires K8s ≥ 1.28 feature gate SidecarContainers.
+# EKS enables it from K8s 1.29 on managed node groups → use sidecarMode=false on EKS 1.28.
 # ══════════════════════════════════════════════════════════════════════
 apiVersion: batch/v1
 kind: Job
@@ -25,7 +27,7 @@ metadata:
   annotations:
     # ── ArgoCD hook configuration ───────────────────────────────────
     argocd.argoproj.io/hook: PostSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # argocd.argoproj.io/hook-delete-policy: Disabled - Jobs will persist for audit
     argocd.argoproj.io/sync-wave: "1"
     # ── Audit metadata ──────────────────────────────────────────────
     ansible-job/playbook: {{ .Values.ansible.playbook | quote }}
@@ -41,7 +43,9 @@ spec:
   parallelism: {{ .Values.job.parallelism }}
   backoffLimit: {{ .Values.job.backoffLimit }}
   activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+  {{- if .Values.job.ttlSecondsAfterFinished }}
   ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  {{- end }}
   template:
     metadata:
       labels:
@@ -95,12 +99,11 @@ spec:
           imagePullPolicy: {{ .Values.gitSync.image.pullPolicy }}
           args:
             - --repo={{ .Values.gitSync.repo }}
-            - --branch={{ .Values.gitSync.branch }}
+            - --ref={{ .Values.gitSync.branch }}
             - --depth={{ .Values.gitSync.depth }}
             - --one-time
             - --root=/ansible-workspace
             - --link=current
-            - --period=0s
           env:
             - name: TZ
               value: {{ .Values.timezone | quote }}
@@ -123,7 +126,7 @@ spec:
         # because they share the same network namespace (standard K8s behavior).
         - name: vpn-sidecar
           image: "{{ .Values.vpn.image.repository }}:{{ .Values.vpn.image.tag }}"
-          imagePullPolicy: {{ .Values.vpn.image.pullPolicy }}
+          imagePullPolicy: Always
           restartPolicy: Always   # Native sidecar: starts before main, stays alive
           env:
             - name: TZ
@@ -132,6 +135,8 @@ spec:
               value: {{ .Values.vpn.interface | quote }}
             - name: MONITOR_INTERVAL
               value: {{ .Values.vpn.monitorInterval | quote }}
+            - name: SIDECAR_MODE
+              value: {{ .Values.vpn.sidecarMode | quote }}
           securityContext:
             {{- toYaml .Values.securityContext.vpn | nindent 12 }}
           volumeMounts:
@@ -140,14 +145,6 @@ spec:
               readOnly: true
           resources:
             {{- toYaml .Values.resources.vpn | nindent 12 }}
-          # Startup probe: ensure WireGuard is up before main container starts
-          startupProbe:
-            exec:
-              command:
-                - /usr/local/bin/healthcheck.sh
-            initialDelaySeconds: 5
-            periodSeconds: 3
-            failureThreshold: 15   # up to 45s to establish VPN
 
       # ── Main container: Ansible Executor ─────────────────────────────
       containers:
@@ -230,14 +227,14 @@ spec:
         - name: vault-secret
           secret:
             secretName: {{ .Values.ansible.vaultSecretName }}
-            defaultMode: 0400
+            defaultMode: 0440  # root:1000 → ansible group can read (fsGroup: 1000)
 
         # SSH private key for connecting to managed hosts
         # Secret must have key: ssh-private-key
         - name: ssh-secret
           secret:
             secretName: {{ .Values.ansible.sshSecretName }}
-            defaultMode: 0400
+            defaultMode: 0440  # root:1000 → ansible group can read (fsGroup: 1000)
 
         # ansible.cfg from ConfigMap
         - name: ansible-cfg

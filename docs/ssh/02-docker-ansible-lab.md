@@ -85,6 +85,10 @@ kubernetes-job-over-VPN/
 │   ├── remote-host/             # Debian SSH target (lab)
 │   │   ├── Dockerfile           # openssh-server + usuario ansible
 │   │   └── entrypoint.sh        # instala authorized_keys + sshd
+│   ├── ssh-test-server/         # servidor SSH genérico para tests básicos
+│   │   ├── Dockerfile
+│   │   ├── entrypoint.sh
+│   │   └── README.md
 │   └── ansible/
 │       ├── Dockerfile
 │       ├── scripts/
@@ -98,9 +102,8 @@ kubernetes-job-over-VPN/
 │   │       ├── hosts.yml        # remote-dev → 10.10.20.10
 │   │       └── group_vars/all.yml
 │   ├── playbooks/
-│   │   ├── test-connectivity.yml
-│   │   └── site.yml
-│   └── roles/common/
+│   │   └── test-connectivity.yml  # playbook unificado
+│   └── roles/               # (opcional, tareas integradas en playbook)
 ├── test/
 │   ├── vpn-lab/
 │   │   ├── setup.sh             # genera claves WireGuard + SSH
@@ -111,8 +114,9 @@ kubernetes-job-over-VPN/
 │   └── secrets/
 │       ├── ssh-private-key      # clave SSH Ansible (generada)
 │       └── ssh-public-key       # montada en remote-host (generada)
-├── docker-compose.yml           # stack completo (profile vpn-lab)
-└── docker-compose.vpn-lab.yml   # lab standalone: solo server + remote-host
+├── docker-compose.yml           # stack completo (profiles: vpn-lab, run, dev)
+├── docker-compose.vpn-lab.yml   # lab standalone: solo server + remote-host
+└── docker-compose.ssh-lab.yml   # lab SSH simple sin VPN (ssh-server + ssh-client)
 ```
 
 ---
@@ -127,6 +131,7 @@ make dev-setup
 ```
 
 Esto crea:
+
 - `test/vpn-lab/wg0-server.conf` — config del servidor WireGuard
 - `test/vpn/wg0.conf` — config del cliente sidecar (Endpoint: `vpn-server:51820`)
 - `test/secrets/ssh-private-key` / `ssh-public-key` — par de claves para Ansible
@@ -148,10 +153,11 @@ make lab-down          # para los containers
 Simula el Job de Kubernetes completo de forma local:
 
 ```bash
-SKIP_VPN=false docker compose --profile vpn-lab up
+SKIP_VPN=false docker compose --profile vpn-lab --profile run up
 ```
 
 Esto arranca en orden:
+
 1. `vpn-server` (WireGuard server, sano antes de continuar)
 2. `remote-host` (sshd, IP fija 10.10.20.10)
 3. `vpn` sidecar (conecta al servidor, levanta `wg0`)
@@ -185,7 +191,7 @@ sequenceDiagram
     participant VPN as vpn-sidecar
     participant ANS as ansible-run
 
-    Note over DC: docker compose --profile vpn-lab up
+    Note over DC: docker compose --profile vpn-lab --profile run up
 
     DC->>WGS: Start (NET_ADMIN, /dev/net/tun)
     WGS->>WGS: wg-quick up wg0 (server 10.10.99.1)

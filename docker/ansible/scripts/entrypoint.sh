@@ -12,6 +12,7 @@ PLAYBOOK="${1:-${ANSIBLE_PLAYBOOK:-playbooks/test-connectivity.yml}}"
 INVENTORY="${ANSIBLE_INVENTORY:-inventories/dev}"
 EXTRA_VARS="${ANSIBLE_EXTRA_VARS:-}"
 VERBOSITY="${ANSIBLE_VERBOSITY:-0}"
+TAGS="${ANSIBLE_TAGS:-}"
 VPN_WAIT_TIMEOUT="${VPN_WAIT_TIMEOUT:-60}"
 VPN_INTERFACE="${VPN_INTERFACE:-wg0}"
 SKIP_VPN_WAIT="${SKIP_VPN_WAIT:-false}"
@@ -65,6 +66,7 @@ build_cmd() {
     cmd+=" -${v_flags}"
   fi
 
+  [[ -n "${TAGS}" ]] && cmd+=" --tags ${TAGS}"
   [[ -n "${EXTRA_VARS}" ]] && cmd+=" --extra-vars '${EXTRA_VARS}'"
   cmd+=" ${PLAYBOOK}"
   echo "${cmd}"

@@ -1,0 +1,36 @@
+services:
+  ssh-server:
+    build:
+      context: .
+      dockerfile: docker/ssh-test-server/Dockerfile
+    container_name: ssh-test-server
+    hostname: ssh-server
+    networks:
+      - ssh-lab-net
+    volumes:
+      - ./test/secrets/ssh-public-key:/tmp/authorized_keys:ro
+    healthcheck:
+      test: ["CMD", "pgrep", "sshd"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  ssh-client:
+    build:
+      context: .
+      dockerfile: docker/ssh-test-server/Dockerfile
+    container_name: ssh-test-client
+    hostname: ssh-client
+    networks:
+      - ssh-lab-net
+    volumes:
+      - ./test/secrets/ssh-private-key:/root/.ssh/id_rsa:ro
+      - ./ansible:/ansible:ro
+    depends_on:
+      - ssh-server
+
+networks:
+  ssh-lab-net:
+    driver: bridge
+    name: ssh-lab-net

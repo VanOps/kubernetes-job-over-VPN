@@ -11,6 +11,9 @@ export TZ="${TZ:-Europe/Madrid}"
 WG_INTERFACE="${WG_INTERFACE:-wg0}"
 WG_CONFIG_PATH="${WG_CONFIG_PATH:-/etc/wireguard/${WG_INTERFACE}.conf}"
 MONITOR_INTERVAL="${MONITOR_INTERVAL:-10}"
+# SIDECAR_MODE=true  → stay alive (K8s native sidecar, restartPolicy: Always)
+# SIDECAR_MODE=false → exit after setup (plain init container, K8s < 1.29 / EKS 1.28)
+SIDECAR_MODE="${SIDECAR_MODE:-true}"
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] [VPN-SIDECAR] $*"
@@ -67,6 +70,15 @@ touch /tmp/vpn-ready   # signal healthcheck
 log "=== WireGuard Status ==="
 wg show "${WG_INTERFACE}" 2>/dev/null || true
 log "========================"
+
+# ── Sidecar mode vs. one-shot init mode ───────────────────────────
+# In one-shot mode (SIDECAR_MODE=false) we exit here.
+# The wg0 interface is a kernel object in the network namespace; it
+# stays up for the lifetime of the Pod even after this process exits.
+if [[ "${SIDECAR_MODE}" != "true" ]]; then
+  log "SIDECAR_MODE=false — one-shot init mode, exiting (wg0 stays up)."
+  exit 0
+fi
 
 # ── Monitor loop (keeps sidecar container running) ─────────────────
 log "Entering monitor loop (interval: ${MONITOR_INTERVAL}s)..."

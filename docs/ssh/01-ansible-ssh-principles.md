@@ -1,20 +1,19 @@
 # 01 — Principios SSH en Ansible
 
-**Audiencia**: DevOps engineers trabajando con Ansible 2.16+ en Debian 12 Bookworm  
+**Audiencia**: DevOps engineers trabajando con Ansible 2.16+ en Debian 12 Bookworm
 **Objetivo**: Entender cómo Ansible gestiona conexiones SSH, autenticación y opciones de configuración críticas para entornos de producción.
+
+> **Prerrequisito**: [0-ssh-basics.md](0-ssh-basics.md) — Fundamentos OpenSSH (known_hosts, ProxyJump, ssh_config)
 
 ---
 
 ## 📋 Tabla de Contenidos
 
 1. [Fundamentos SSH en Ansible](#fundamentos)
-2. [Gestión de known_hosts](#known-hosts)
-3. [StrictHostKeyChecking](#strict-host-key-checking)
-4. [ProxyJump para Hosts Intermedios](#proxyjump)
-5. [Configuración ansible.cfg](#ansible-cfg)
-6. [Configuración ssh_config](#ssh-config)
-7. [Diagrama de Flujo: Conexión SSH](#diagrama-flujo)
-8. [Troubleshooting Común](#troubleshooting)
+2. [Configuración ansible.cfg](#ansible-cfg)
+3. [ProxyJump desde Ansible](#proxyjump)
+4. [Diagrama de Flujo: Conexión SSH Ansible → Remoto](#diagrama-flujo)
+5. [Troubleshooting Ansible](#troubleshooting)
 
 ---
 
@@ -46,145 +45,7 @@ ansible-playbook → Inventory → foreach host:
 
 ---
 
-## <a id="known-hosts"></a>2. Gestión de known_hosts
-
-El archivo `~/.ssh/known_hosts` contiene las **huellas digitales (fingerprints)** de las claves públicas de servidores SSH conocidos. SSH verifica estas huellas para prevenir ataques **Man-in-the-Middle (MITM)**.
-
-### Problema en Entornos Dinámicos
-
-En producción con:
-
-- IPs dinámicas (cloud autoscaling)
-- Containers efímeros
-- Kubernetes Jobs (cada Job = nuevo pod)
-
-El archivo `known_hosts` puede quedar **obsoleto** o **inexistente**, causando fallos de conexión.
-
-### Soluciones Producción
-
-#### Opción 1: Pre-poblar known_hosts (Recomendado)
-
-```bash
-# En initContainer o entrypoint:
-ssh-keyscan -H 10.10.0.50 >> ~/.ssh/known_hosts
-ssh-keyscan -H server1.vpn.int >> ~/.ssh/known_hosts
-chmod 600 ~/.ssh/known_hosts
-```
-
-**Ventajas**: Seguridad MITM, auditable  
-**Desventajas**: Requiere conocer IPs de antemano
-
-#### Opción 2: StrictHostKeyChecking=no (Solo Dev/Testing)
-
-```ini
-# ansible.cfg
-[ssh_connection]
-ssh_args = -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
-```
-
-⚠️ **NUNCA en producción** — vulnerable a MITM
-
-#### Opción 3: StrictHostKeyChecking=accept-new (Ansible 2.12+)
-
-```bash
-# Solo acepta nuevas claves, rechaza cambios
-ssh -o StrictHostKeyChecking=accept-new user@host
-```
-
-**Balance**: Acepta nuevas IPs pero detecta cambios sospechosos.
-
----
-
-## <a id="strict-host-key-checking"></a>3. StrictHostKeyChecking
-
-Control de verificación de host keys SSH:
-
-| Valor        | Comportamiento                                                  | Uso Recomendado |
-| ------------ | --------------------------------------------------------------- | --------------- |
-| `yes`        | Rechaza hosts desconocidos + claves cambiadas (default OpenSSH) | **Producción**  |
-| `no`         | Acepta todo sin verificar (⚠️ inseguro)                         | Solo Lab local  |
-| `accept-new` | Acepta nuevos, rechaza cambios                                  | Infra dinámica  |
-| `ask`        | Pregunta al usuario (no funciona en automation)                 | N/A             |
-
-### Configuración por Nivel
-
-```ini
-# 1. ansible.cfg — aplica a todos los hosts
-[ssh_connection]
-ssh_args = -o ControlMaster=auto -o ControlPersist=60s -o StrictHostKeyChecking=accept-new
-
-# 2. ssh_config — aplica a SSH client globalmente
-Host *.vpn.int
-    StrictHostKeyChecking accept-new
-    UserKnownHostsFile ~/.ssh/known_hosts_vpn
-
-# 3. Inventory/Playbook — override por host
-ansible_ssh_extra_args: '-o StrictHostKeyChecking=yes'
-```
-
-### Precedencia (Mayor → Menor)
-
-```
-Playbook/Inventory vars > ansible.cfg > ssh_config > SSH defaults
-```
-
----
-
-## <a id="proxyjump"></a>4. ProxyJump para Hosts Intermedios
-
-`ProxyJump` (OpenSSH 7.3+) permite SSH a través de un **bastion host** sin túneles manuales.
-
-### Escenario: Ansible → Bastion VPN → Hosts Privados
-
-```
-┌─────────────────┐      ┌──────────────────┐      ┌────────────────────┐
-│ Ansible Control │──────▶│ Bastion (VPN GW) │──────▶│ Private Host       │
-│ 172.17.0.2      │ SSH  │ 10.10.0.1        │ SSH  │ 10.10.0.50         │
-└─────────────────┘      └──────────────────┘      └────────────────────┘
-  Public network           VPN tunnel                Private subnet
-```
-
-### Configuración ssh_config
-
-```
-# ~/.ssh/config
-Host bastion
-    HostName 10.10.0.1
-    User vpnuser
-    IdentityFile /run/secrets/bastion-key
-    StrictHostKeyChecking accept-new
-
-Host *.private.int
-    ProxyJump bastion
-    User ansible
-    IdentityFile /run/secrets/deploy-key
-    StrictHostKeyChecking accept-new
-```
-
-### Alternativa: ansible_ssh_extra_args
-
-```yaml
-# inventories/prod/group_vars/all.yml
-ansible_ssh_common_args: >-
-  -o ControlMaster=auto
-  -o ControlPersist=300s
-  -o ProxyJump=bastion.vpn.int
-  -o ServerAliveInterval=60
-```
-
-### Verificación Manual
-
-```bash
-# Test ProxyJump
-ssh -J bastion.vpn.int ansible@server1.private.int whoami
-
-# Debug verbose
-ssh -vvv -J bastion.vpn.int ansible@server1.private.int
-```
-
----
-
-## <a id="ansible-cfg"></a>5. Configuración ansible.cfg (Debian 12)
+## <a id="ansible-cfg"></a>2. Configuración ansible.cfg (Debian 12)
 
 Archivo ubicado en `/etc/ansible/ansible.cfg` o `./ansible.cfg` (proyecto).
 
@@ -222,6 +83,60 @@ become_user = root
 become_ask_pass = False
 ```
 
+### Equivalente en YAML (Inventory Variables)
+
+La mayoría de parámetros de `ansible.cfg` tienen equivalente como variables de inventario, lo que permite sobreescribirlos por grupo o por host individual.
+
+**`group_vars/all.yml`** — aplica a todos los hosts:
+
+```yaml
+# [ssh_connection]
+ansible_ssh_extra_args: "-o ControlMaster=auto -o ControlPersist=300s -o ServerAliveInterval=60 -o ServerAliveCountMax=3"
+ansible_ssh_retries: 3
+ansible_pipelining: true
+
+# [privilege_escalation]
+ansible_become: true
+ansible_become_method: sudo
+ansible_become_user: root
+```
+
+**`hosts.yml`** — configuración por host específico:
+
+```yaml
+all:
+  hosts:
+    remote-dev:
+      ansible_host: 10.10.20.10
+      ansible_user: debian
+      ansible_ssh_extra_args: "-o ControlMaster=auto -o ControlPersist=300s -o ServerAliveInterval=60 -o ServerAliveCountMax=3"
+      ansible_ssh_retries: 3
+      ansible_pipelining: true
+      ansible_become: true
+      ansible_become_method: sudo
+      ansible_become_user: root
+
+    otro-host:
+      ansible_host: 10.10.20.11
+      # Deshabilitar pipelining si sudoers es restrictivo
+      ansible_pipelining: false
+      ansible_become: true
+```
+
+**Parámetros sin equivalente YAML** (solo disponibles en `ansible.cfg`):
+
+| Parámetro `ansible.cfg` | Motivo                                  |
+| ----------------------- | --------------------------------------- |
+| `forks`                 | Global del proceso Ansible, no por host |
+| `gathering`             | Política global de facts                |
+| `control_path`          | Ruta del socket ControlMaster           |
+| `transfer_method`       | Método de transferencia global          |
+| `sftp_batch_mode`       | Opción de transporte global             |
+
+**Prioridad**: `host_vars/` > `group_vars/` > `ansible.cfg`
+
+---
+
 ### Notas Debian-Específicas
 
 1. **Pipelining + sudo**: Requiere editar `/etc/sudoers`:
@@ -243,70 +158,41 @@ become_ask_pass = False
 
 ---
 
-## <a id="ssh-config"></a>6. Configuración ssh_config (Debian-Specific)
+## <a id="proxyjump"></a>3. ProxyJump desde Ansible
 
-Archivo: `/etc/ssh/ssh_config` (sistema) o `~/.ssh/config` (usuario).
+> Para la teoría de ProxyJump y configuración `~/.ssh/config`, ver [0-ssh-basics.md → ProxyJump](0-ssh-basics.md#proxyjump).
 
-```
-# ~/.ssh/config — Ansible-optimized SSH config
+Ansible expone ProxyJump mediante `ansible_ssh_common_args` o `ansible.cfg`.
 
-# Global defaults
-Host *
-    ServerAliveInterval 60
-    ServerAliveCountMax 3
-    TCPKeepAlive yes
-    Compression yes
-    StrictHostKeyChecking accept-new
-    UserKnownHostsFile ~/.ssh/known_hosts
-    IdentitiesOnly yes
+Para ProxyJump conviene ansible_ssh_common_args porque la transferencia de archivos (sftp/scp) también necesita pasar por el proxy. Con ansible_ssh_extra_args el tunel funciona para la ejecución pero las transferencias podrían fallar.
 
-# VPN-accessed hosts
-Host *.vpn.int
-    ProxyJump bastion.vpn.int
-    User ansible
-    IdentityFile /run/secrets/deploy-key
-    ControlMaster auto
-    ControlPersist 300s
-    ControlPath /tmp/ssh-control-%h-%p-%r
+Para opciones como ControlMaster, ServerAliveInterval (que son solo de la conexión SSH), ansible_ssh_extra_args es suficiente — que es exactamente lo que hemos puesto en la sección que añadimos antes.
 
-# Bastion host
-Host bastion.vpn.int
-    HostName 10.10.0.1
-    User vpnuser
-    IdentityFile /run/secrets/bastion-key
-    ForwardAgent no
-    PermitLocalCommand no
+La configuración de ProxyJump se puede hacer a nivel global (todos los hosts) o por host específico:
 
-# Dev environment (local testing)
-Host dev-*.local
-    StrictHostKeyChecking no
-    UserKnownHostsFile /dev/null
-    LogLevel ERROR
+```yaml
+# inventories/prod/group_vars/all.yml >> aplica a todos los hosts
+# host_vars/server1.yml >> aplica solo a server1
+ansible_ssh_common_args: >-
+  -o ControlMaster=auto
+  -o ControlPersist=300s
+  -o ProxyJump=bastion.vpn.int
+  -o ServerAliveInterval=60
 ```
 
-### Opciones Clave para Producción
-
-| Opción                | Valor Recomendado | Razón                                         |
-| --------------------- | ----------------- | --------------------------------------------- |
-| `ServerAliveInterval` | `60`              | Mantiene conexión viva (NAT/firewalls)        |
-| `ServerAliveCountMax` | `3`               | Reintentos antes de timeout                   |
-| `ControlPersist`      | `300s` (5 min)    | Reutiliza conexión (reduce handshakes)        |
-| `Compression`         | `yes`             | Útil en enlaces lentos/VPN                    |
-| `IdentitiesOnly`      | `yes`             | Previene probar todas las claves en ssh-agent |
-| `ForwardAgent`        | `no`              | Seguridad — evita agent hijacking             |
-
-### Verificar Config Efectiva
-
-```bash
-# Ver config SSH parseada para un host
-ssh -G server1.vpn.int
-
-# Output muestra valores finales aplicados (incluye defaults)
+```ini
+# ansible.cfg — alternativa global
+[ssh_connection]
+ssh_args = -o ProxyJump=bastion.vpn.int -o ControlMaster=auto -o ControlPersist=300s
 ```
+
+Prioridad de configuración SSH en Ansible:
+
+_Playbook/Inventory vars > ansible.cfg > ssh_config > SSH defaults_
 
 ---
 
-## <a id="diagrama-flujo"></a>7. Diagrama de Flujo: Conexión SSH Ansible → Remoto
+## <a id="diagrama-flujo"></a>4. Diagrama de Flujo: Conexión SSH Ansible → Remoto
 
 ```mermaid
 sequenceDiagram
@@ -364,66 +250,36 @@ sequenceDiagram
 
 ### Explicación de Pasos
 
-1-3. **Inicialización**: Ansible parsea inventory y configuración SSH  
-4-6. **Loop por Host**: Para cada host en inventory  
-7-11. **ProxyJump**: Si configurado, establece túnel a través de bastion  
-12-19. **Verificación known_hosts**: Valida fingerprint según StrictHostKeyChecking  
-20-21. **Autenticación**: Clave pública SSH (pubkey)  
-22-24. **Ejecución**: Copia módulo Python y ejecuta  
-25. **Resultado**: Ansible procesa JSON y marca tarea como changed/ok/failed
+1-3. **Inicialización**: Ansible parsea inventory y configuración SSH
+4-6. **Loop por Host**: Para cada host en inventory
+7-11. **ProxyJump**: Si configurado, establece túnel a través de bastion
+12-19. **Verificación known_hosts**: Valida fingerprint según StrictHostKeyChecking
+20-21. **Autenticación**: Clave pública SSH (pubkey)
+22-24. **Ejecución**: Copia módulo Python y ejecuta 25. **Resultado**: Ansible procesa JSON y marca tarea como changed/ok/failed
 
 ---
 
-## <a id="troubleshooting"></a>8. Troubleshooting Común
+## <a id="troubleshooting"></a>5. Troubleshooting Ansible
 
-### 🔴 Error: "Host key verification failed"
+> Para errores genéricos de SSH (host key verification, permission denied), ver [0-ssh-basics.md → Troubleshooting](0-ssh-basics.md#troubleshooting).
+
+### 🔴 Error: "Host key verification failed" (desde Ansible)
 
 ```
 fatal: [server1]: UNREACHABLE! => {"changed": false, "msg": "Failed to connect to the host via ssh:
 Host key verification failed.", "unreachable": true}
 ```
 
-**Causa**: Clave en `known_hosts` no coincide o falta  
-**Solución**:
+**Solución rápida para dev**:
 
 ```bash
-# Remover entrada antigua
-ssh-keygen -R 10.10.0.50
-
-# Añadir nueva
-ssh-keyscan -H 10.10.0.50 >> ~/.ssh/known_hosts
-
-# O temporalmente (dev only):
 export ANSIBLE_HOST_KEY_CHECKING=False
 ```
 
----
-
-### 🔴 Error: "Permission denied (publickey)"
-
-```
-fatal: [server1]: UNREACHABLE! => {"msg": "Failed to connect: Permission denied (publickey)."}
-```
-
-**Causa**: Clave SSH no autorizada o no encontrada  
-**Diagnóstico**:
+**Solución producción** — pre-poblar `known_hosts` en `ansible.cfg` o initContainer:
 
 ```bash
-# Test manual con verbose
-ssh -vvv -i /run/secrets/ssh-key ansible@10.10.0.50
-
-# Verificar permisos (deben ser 600)
-ls -la /run/secrets/ssh-key
-
-# Verificar si clave está en authorized_keys del remoto
-ssh root@10.10.0.50 "cat ~/.ssh/authorized_keys"
-```
-
-**Solución**:
-
-```bash
-# Copiar clave pública al remoto (una sola vez)
-ssh-copy-id -i /run/secrets/ssh-key.pub ansible@10.10.0.50
+ssh-keyscan -H 10.10.0.50 >> ~/.ssh/known_hosts
 ```
 
 ---
@@ -434,7 +290,7 @@ ssh-copy-id -i /run/secrets/ssh-key.pub ansible@10.10.0.50
 fatal: [server1]: FAILED! => {"msg": "Timeout (30s) waiting for privilege escalation prompt"}
 ```
 
-**Causa**: `sudo` requiere password o TTY  
+**Causa**: `sudo` requiere password o TTY
 **Solución**:
 
 ```bash
@@ -451,7 +307,7 @@ Defaults:ansible !requiretty
 ControlSocket /tmp/ansible-ssh-10.10.0.50-22-ansible already exists
 ```
 
-**Causa**: Socket de ControlMaster huérfano  
+**Causa**: Socket de ControlMaster huérfano
 **Solución**:
 
 ```bash
@@ -471,7 +327,7 @@ perl: warning: Setting locale failed.
 perl: warning: Please check that your locale settings
 ```
 
-**Causa**: Locales no configurados en Debian  
+**Causa**: Locales no configurados en Debian
 **Solución**:
 
 ```bash
@@ -487,20 +343,17 @@ export LANG=en_US.UTF-8
 
 ---
 
-### 🟡 Debug: Aumentar Verbosidad SSH
+### 🟡 Debug: Verbosidad ansible-playbook
 
 ```bash
 # Nivel 1 (básico)
 ansible-playbook -v playbook.yml
 
-# Nivel 3 (SSH debug)
+# Nivel 3 (SSH debug — muestra comandos SSH ejecutados)
 ansible-playbook -vvv playbook.yml
 
-# Nivel 4 (máximo - SSH + Python modules)
+# Nivel 4 (máximo — SSH + Python modules)
 ansible-playbook -vvvv playbook.yml
-
-# SSH debug manual
-ssh -vvv ansible@10.10.0.50
 ```
 
 ---
@@ -509,7 +362,6 @@ ssh -vvv ansible@10.10.0.50
 
 - [Ansible SSH Connection Plugin Docs](https://docs.ansible.com/ansible/latest/collections/ansible/builtin/ssh_connection.html)
 - [OpenSSH Config Man Page](https://man.openbsd.org/ssh_config)
-- [SSH ProxyJump Tutorial](https://www.redhat.com/sysadmin/ssh-proxy-bastion-proxyjump)
 - [Debian 12 SSH Hardening](https://wiki.debian.org/SSH)
 
 ---

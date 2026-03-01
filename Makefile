@@ -23,6 +23,7 @@ ARGOCD_TOKEN  ?= $(shell cat ~/.argocd-token 2>/dev/null || echo "SET_ARGOCD_TOK
 ANSIBLE_PLAYBOOK  ?= playbooks/test-connectivity.yml
 ANSIBLE_INVENTORY ?= inventories/dev
 ANSIBLE_VERBOSITY ?= 2
+ANSIBLE_TAGS      ?= test
 
 # ── Colours ────────────────────────────────────────────────────────────
 CYAN  := \033[0;36m
@@ -292,6 +293,12 @@ k8s-secrets-dev: ## Create K8s secrets in dev namespace (initial testing, no Ext
 	kubectl create secret generic ansible-ssh-key \
 	  --from-file=ssh-private-key=./test/secrets/ssh-private-key \
 	  -n ansible-jobs-dev --dry-run=client -o yaml | kubectl apply -f -
+	kubectl create secret docker-registry ghcr-pull-secret \
+		--docker-server=ghcr.io \
+		--docker-username=${GITHUB_USER} \
+		--docker-password=${GITHUB_PAT} \
+		-n ansible-jobs-dev
+	echo ${GITHUB_PAT} | docker login ghcr.io -u ${GITHUB_USER} --password-stdin
 	@echo "Secrets created in ansible-jobs-dev ✓"
 
 .PHONY: k8s-secrets-vault-token
@@ -415,3 +422,47 @@ update-image-tags: ## Update image tags in Helm values to current git SHA
 	             -i helm/ansible-job/values-$$f.yaml; done ;; \
 	  esac
 	@echo "Done ✓"
+
+## ── SSH Testing Labs ───────────────────────────────────────────────────
+
+.PHONY: ssh-lab-up
+ssh-lab-up: ## Start SSH testing lab (server + client with automated tests)
+	@echo "$(CYAN)Starting SSH testing lab...$(RESET)"
+	docker compose -f docker-compose.ssh-lab.yml up --build -d
+	@echo "$(CYAN)Waiting for services to be ready...$(RESET)"
+	@sleep 3
+	docker compose -f docker-compose.ssh-lab.yml logs -f ssh-client
+
+.PHONY: ssh-lab-logs
+ssh-lab-logs: ## View SSH lab logs (both server and client)
+	docker compose -f docker-compose.ssh-lab.yml logs -f
+
+.PHONY: ssh-lab-down
+ssh-lab-down: ## Stop and remove SSH testing lab
+	@echo "$(CYAN)Stopping SSH lab...$(RESET)"
+	docker compose -f docker-compose.ssh-lab.yml down
+
+.PHONY: ssh-lab-reset
+ssh-lab-reset: ssh-lab-down ssh-lab-up ## Reset SSH lab (down + up)
+
+.PHONY: ssh-lab-shell
+ssh-lab-shell: ## Open interactive shell in SSH client container
+	docker exec -it ssh-test-client sh
+
+.PHONY: ssh-test-connection
+ssh-test-connection: ## Test SSH connection manually from client to server
+	@echo "$(CYAN)Testing SSH connection...$(RESET)"
+	docker exec -it ssh-test-client \
+	  ssh -o StrictHostKeyChecking=accept-new ansible@ssh-server whoami
+
+.PHONY: ssh-test-ansible
+ssh-test-ansible: ## Test Ansible ping against SSH server
+	@echo "$(CYAN)Testing Ansible ping module...$(RESET)"
+	docker exec ssh-test-client \
+	  ansible all -i ssh-server, -u ansible --private-key=/root/.ssh/id_rsa -m ping
+
+.PHONY: build-ssh-server
+build-ssh-server: ## Build SSH test server image
+	@echo "$(CYAN)Building SSH test server...$(RESET)"
+	docker build -t ssh-test-server:latest -f docker/ssh-test-server/Dockerfile .
+	@echo "$(CYAN)Done ✓$(RESET)"
