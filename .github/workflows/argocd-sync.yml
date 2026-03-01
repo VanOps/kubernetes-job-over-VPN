@@ -19,8 +19,6 @@ name: ArgoCD Selective Sync
 on:
   push:
     branches:
-      - develop
-      - staging
       - main
     paths:
       - "helm/**"
@@ -124,7 +122,7 @@ jobs:
     needs: resolve-env
     if: needs.resolve-env.outputs.environment == 'staging'
     runs-on: ubuntu-latest
-    environment: staging    # Requires GitHub Environment protection rules
+    environment: staging # Requires GitHub Environment protection rules
     steps:
       - name: Install ArgoCD CLI
         run: |
@@ -165,7 +163,7 @@ jobs:
     needs: resolve-env
     if: needs.resolve-env.outputs.environment == 'prod'
     runs-on: ubuntu-latest
-    environment: production  # Requires GitHub Environment with required reviewers
+    environment: production # Requires GitHub Environment with required reviewers
     steps:
       - name: Install ArgoCD CLI
         run: |
