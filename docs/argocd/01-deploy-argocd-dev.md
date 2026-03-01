@@ -115,6 +115,8 @@ El Job requiere **tres Secrets** en el namespace `ansible-jobs-dev` antes de que
 sincronizar correctamente. En dev se crean manualmente; en staging/prod los gestiona
 ExternalSecrets Operator.
 
+> **Para staging:** Ver la [guía completa de configuración de HashiCorp Vault](../vault/01-vault-setup-staging.md) con KV v2 mount, políticas y External Secrets Operator.
+
 ### 1. WireGuard config (`vpn-wireguard-config`)
 
 Contiene el fichero `wg0.conf` que define el túnel VPN cliente.
@@ -883,9 +885,14 @@ kubectl get secrets -n ansible-jobs-dev \
 
 ## Referencias
 
+### ArgoCD y Helm
 - [argocd/apps/dev.yaml](../../argocd/apps/dev.yaml) — Application ArgoCD del entorno dev
 - [argocd/app-of-apps.yaml](../../argocd/app-of-apps.yaml) — Bootstrap App-of-Apps
 - [helm/ansible-job/values-dev.yaml](../../helm/ansible-job/values-dev.yaml) — Valores Helm dev
 - [helm/ansible-job/values.yaml](../../helm/ansible-job/values.yaml) — Valores base Helm
-- [k8s/external-secrets/](../../k8s/external-secrets/) — ExternalSecrets para staging/prod
 - [docs/helm/01-deploy-helm-lab.md](../helm/01-deploy-helm-lab.md) — Despliegue con Helm directo (sin ArgoCD)
+
+### Gestión de Secretos
+- [docs/vault/01-vault-setup-staging.md](../vault/01-vault-setup-staging.md) — Configuración completa de HashiCorp Vault para staging
+- [docs/vault/README.md](../vault/README.md) — Guía rápida de Vault
+- [k8s/external-secrets/](../../k8s/external-secrets/) — Manifests de ExternalSecrets para staging/prod
