@@ -145,6 +145,9 @@ jobs:
             https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
+      - name: Sync with latest HEAD changes on the same branch
+        run: git pull origin ${{ github.ref_name }} --rebase
+
       - name: Determine values file and registry owner
         id: env
         run: |
