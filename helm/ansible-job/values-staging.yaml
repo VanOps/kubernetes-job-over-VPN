@@ -7,6 +7,7 @@ vpn:
     tag: "dca96a2" # CI updates on staging branch push
     pullPolicy: Always # force re-pull during dev; remove once image tag is pinned to a SHA
   secretName: vpn-wireguard-config
+  sidecarMode: "false" # EKS 1.28: no native sidecar support; one-shot init mode
 
 ansible:
   image:
@@ -22,7 +23,7 @@ gitSync:
   branch: staging
 
 job:
-  ttlSecondsAfterFinished: 7200 # 2h – keep pods for staging log inspection
+  # ttlSecondsAfterFinished: 7200 # Disabled - Jobs will persist for audit
   backoffLimit: 2
   activeDeadlineSeconds: 1800 # 30min
 

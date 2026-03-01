@@ -69,9 +69,8 @@ gitSync:
 job:
   # Kubernetes Job is managed as an ArgoCD PostSync hook:
   # - Runs AFTER ConfigMaps, Secrets, SA, RBAC are synced
-  # - BeforeHookCreation deletes the previous Job before creating a new one
-  # → Zero-downtime recreation guaranteed
-  ttlSecondsAfterFinished: 3600 # 1h; 86400 for prod audit
+  # - Jobs persist for audit and debugging (no auto-deletion)
+  # ttlSecondsAfterFinished: null # Disabled - Jobs will not be auto-deleted
   backoffLimit: 2
   activeDeadlineSeconds: 1800 # 30min max; 3600 for prod
   completions: 1

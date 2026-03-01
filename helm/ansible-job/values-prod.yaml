@@ -19,7 +19,7 @@ ansible:
 gitSync:
   branch: main
 job:
-  ttlSecondsAfterFinished: 86400 # 24h – retain completed pods for audit trail
+  # ttlSecondsAfterFinished: 86400 # Disabled - Jobs will persist for full audit trail
   backoffLimit: 1 # fail fast in prod
   activeDeadlineSeconds: 3600 # 1h max
 serviceAccount:

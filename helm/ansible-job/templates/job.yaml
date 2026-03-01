@@ -4,8 +4,8 @@
 #
 # ArgoCD Hook Pattern:
 #   PostSync         → Job runs AFTER ConfigMaps/Secrets/SA/RBAC are synced
-#   BeforeHookCreation → Previous Job deleted before creating new one
 #   sync-wave "1"    → Explicit ordering (wave 0 = infra, wave 1 = job)
+#   No delete policy → Jobs persist for audit/debugging
 #
 # Pod Architecture (all containers share the same network namespace):
 #   [init] git-sync        → Clones Ansible monorepo into emptyDir volume
@@ -27,7 +27,7 @@ metadata:
   annotations:
     # ── ArgoCD hook configuration ───────────────────────────────────
     argocd.argoproj.io/hook: PostSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # argocd.argoproj.io/hook-delete-policy: Disabled - Jobs will persist for audit
     argocd.argoproj.io/sync-wave: "1"
     # ── Audit metadata ──────────────────────────────────────────────
     ansible-job/playbook: {{ .Values.ansible.playbook | quote }}
@@ -43,7 +43,9 @@ spec:
   parallelism: {{ .Values.job.parallelism }}
   backoffLimit: {{ .Values.job.backoffLimit }}
   activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+  {{- if .Values.job.ttlSecondsAfterFinished }}
   ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  {{- end }}
   template:
     metadata:
       labels:
