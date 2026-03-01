@@ -759,7 +759,7 @@ graph TB
 2. **Main Container (ansible-executor)**:
    - Espera que `wg0` esté UP (`wait-for-vpn.sh`)
    - Carga SSH key desde Secret
-   - Ejecuta `ansible-playbook -i inventories/prod playbooks/site.yml`
+   - Ejecuta `ansible-playbook -i inventories/prod playbooks/test-connectivity.yml`
 
 3. **SSH sobre VPN**:
    - Ansible resuelve `10.10.0.50` (inventory)

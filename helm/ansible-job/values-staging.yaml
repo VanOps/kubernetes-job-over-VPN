@@ -12,7 +12,7 @@ vpn:
 ansible:
   image:
     tag: "dca96a2"
-  playbook: playbooks/site.yml
+  playbook: playbooks/test-connectivity.yml
   inventory: inventories/staging
   verbosity: 1
   extraEnvVars:

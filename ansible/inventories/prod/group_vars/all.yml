@@ -1,17 +1,21 @@
 ---
-environment: prod
+# ── Dev environment variables ────────────────────────────────────────────
+environment: dev
 timezone: Europe/Madrid
 
-vpn_subnet: "10.30.0.0/24"
+# VPN
+vpn_subnet: "10.10.0.0/24"
 vpn_interface: wg0
 
+# SSH key (mounted at runtime as K8s Secret)
 ansible_ssh_private_key_file: /run/secrets/ssh-private-key
 
-app_port: 80
-app_version: "{{ lookup('env', 'APP_VERSION') | default('stable', true) }}"
+# App config
+app_port: 8080
+app_version: "{{ lookup('env', 'APP_VERSION') | default('latest', true) }}"
 
-log_level: warning
+# Logging
+log_level: debug
 
-# Prod hardening
-ansible_ssh_retries: 3
-task_timeout: 300
+# Vault vars loaded from ansible/vault/secrets.yml (ansible-vault encrypted)
+# Usage: "{{ vault_db_password }}"  — vault prefix is conventional, not enforced

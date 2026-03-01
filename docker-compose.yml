@@ -89,6 +89,7 @@ services:
       - ANSIBLE_INVENTORY=${ANSIBLE_INVENTORY:-inventories/dev}
       - ANSIBLE_PLAYBOOK=${ANSIBLE_PLAYBOOK:-playbooks/test-connectivity.yml}
       - ANSIBLE_VERBOSITY=${ANSIBLE_VERBOSITY:-2}
+      - ANSIBLE_TAGS=${ANSIBLE_TAGS:-test}
       - SKIP_VPN_WAIT=${SKIP_VPN:-true}
       - VPN_INTERFACE=wg0
       # Runtime-only vars (not baked into image to avoid linter warnings)
@@ -99,7 +100,7 @@ services:
       - ./test/secrets:/run/secrets:ro
     logging: *default-logging
     profiles:
-      - dev   # Only started with: docker compose --profile dev up
+      - dev # Only started with: docker compose --profile dev up
 
   # ── Local Ansible run (one-shot, exits after playbook) ───────────────
   ansible-run:
@@ -118,6 +119,7 @@ services:
       - ANSIBLE_INVENTORY=${ANSIBLE_INVENTORY:-inventories/dev}
       - ANSIBLE_PLAYBOOK=${ANSIBLE_PLAYBOOK:-playbooks/test-connectivity.yml}
       - ANSIBLE_VERBOSITY=${ANSIBLE_VERBOSITY:-2}
+      - ANSIBLE_TAGS=${ANSIBLE_TAGS:-test}
       - SKIP_VPN_WAIT=${SKIP_VPN:-true}
       - VPN_INTERFACE=wg0
       - ANSIBLE_VAULT_PASSWORD_FILE=/run/secrets/vault-password
@@ -128,7 +130,7 @@ services:
     restart: no
     logging: *default-logging
     profiles:
-      - run   # docker compose --profile run up --abort-on-container-exit
+      - run # docker compose --profile run up --abort-on-container-exit
 
   # ── VPN Lab: WireGuard Server ────────────────────────────────────
   # Simulates the real WireGuard VPN endpoint.

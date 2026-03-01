@@ -23,6 +23,7 @@ ARGOCD_TOKEN  ?= $(shell cat ~/.argocd-token 2>/dev/null || echo "SET_ARGOCD_TOK
 ANSIBLE_PLAYBOOK  ?= playbooks/test-connectivity.yml
 ANSIBLE_INVENTORY ?= inventories/dev
 ANSIBLE_VERBOSITY ?= 2
+ANSIBLE_TAGS      ?= test
 
 # ── Colours ────────────────────────────────────────────────────────────
 CYAN  := \033[0;36m
