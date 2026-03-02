@@ -46,7 +46,7 @@ spec:
 
   syncPolicy:
     automated:
-      prune: true # Delete resources removed from Git
+      prune: false # Delete resources removed from Git
       selfHeal: true # Re-sync if cluster state drifts from Git
     syncOptions:
       - CreateNamespace=true
