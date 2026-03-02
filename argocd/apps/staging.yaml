@@ -50,7 +50,7 @@ spec:
   syncPolicy:
     automated:
       prune: false # Do NOT auto-prune – require explicit approval
-      selfHeal: false # Detect drift but wait for CI/human to act
+      selfHeal: true # Re-sync if cluster state drifts from Git
     syncOptions:
       - CreateNamespace=true
       - Replace=true
