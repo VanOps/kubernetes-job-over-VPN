@@ -117,6 +117,12 @@ ExternalSecrets Operator.
 
 > # **Para staging:** Ver la [guía completa de configuración de HashiCorp Vault](../vault/01-vault-setup-staging.md) con KV v2 mount, políticas y External Secrets Operator.
 
+# <<<<<<< HEAD
+
+> **Para staging:** Ver la [guía completa de configuración de HashiCorp Vault](../vault/README.md) con KV v2 mount, políticas y External Secrets Operator.
+>
+> > > > > > > a875c2c (Staging (#5))
+
 ### 1. WireGuard config (`vpn-wireguard-config`)
 
 Contiene el fichero `wg0.conf` que define el túnel VPN cliente.
@@ -723,9 +729,12 @@ ArgoCD sincronizará automáticamente la nueva configuración.
 - **Dev:** Secrets manuales en el clúster (`kubectl create secret`)
 - **Staging:** External Secrets Operator + HashiCorp Vault
   <<<<<<< HEAD
+  <<<<<<< HEAD
 - # **Prod:** External Secrets Operator + HashiCorp Vault
 - **Prod:** External Secrets Operator + AWS Secrets Manager
-  > > > > > > > 7153a2c (Staging (#4))
+  > > > > > > > # 7153a2c (Staging (#4))
+- **Prod:** External Secrets Operator + HashiCorp Vault
+  > > > > > > > a875c2c (Staging (#5))
 
 Ver [k8s/external-secrets/](../../k8s/external-secrets/) para la configuración de staging/prod.
 
@@ -902,5 +911,4 @@ kubectl get secrets -n ansible-jobs-dev \
 - [docs/vault/01-vault-setup-staging.md](../vault/01-vault-setup-staging.md) — Configuración completa de HashiCorp Vault para staging
 - [docs/vault/README.md](../vault/README.md) — Guía completa de HashiCorp Vault para staging y prod
 - [docs/aws-secrets-manager/README.md](../aws-secrets-manager/README.md) — Guía de referencia de AWS Secrets Manager (no se usa actualmente)
-- [docs/vault/README.md](../vault/README.md) — Guía completa de HashiCorp Vault para staging
 - [k8s/external-secrets/](../../k8s/external-secrets/) — Manifests de ExternalSecrets para staging/prod
