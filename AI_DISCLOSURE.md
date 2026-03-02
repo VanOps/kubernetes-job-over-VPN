@@ -1,8 +1,8 @@
 # AI Content Disclosure (EU AI Act Art.50)
 
-**Last Updated**: 2026-03-02T10:18:32Z
-**Commit**: cd4f7d61715dd0892c6201a9f229857d9e69741c
-**Workflow Run**: 22571498027
+**Last Updated**: 2026-03-02T10:28:07Z
+**Commit**: 503843c9f05ba4d9eb69604bbf29e240457ceaf8
+**Workflow Run**: 22571837490
 
 ## Purpose
 This repository uses AI-assisted code generation for development and maintenance tasks.
@@ -12,29 +12,7 @@ transparency in AI-generated content.
 ## Recent Changes (Last Commit)
 ### Modified files with potential AI assistance:
 
-- .github/workflows/argocd-sync.yml
-- .github/workflows/ci-ai-compliance.yaml
-- .github/workflows/release-ansible.yml
-- AI_DISCLOSURE.md
-- README.md
-- RELEASE.md
-- argocd/apps/dev.yaml
-- argocd/apps/prod.yaml
-- argocd/apps/staging.yaml
-- docs/argocd/README.md
-- docs/argocd/github-notifications-github-app.md
-- docs/argocd/github-notifications-pat.md
-- docs/argocd/github-notifications.md
-- docs/aws-secrets-manager/README.md
-- docs/vault/README.md
 - helm/ansible-job/templates/job.yaml
-- helm/ansible-job/values-prod.yaml
-- helm/ansible-job/values.yaml
-- k8s/argocd-notifications/README.md
-- k8s/argocd-notifications/configmap.yaml
-- k8s/argocd-notifications/github-app-secret.yaml
-- k8s/argocd-notifications/github-token-secret.yaml
-- k8s/external-secrets/prod-external-secret.yaml
 
 ## Repository Overview
 
