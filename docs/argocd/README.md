@@ -116,8 +116,6 @@ sincronizar correctamente. En dev se crean manualmente; en staging/prod los gest
 ExternalSecrets Operator.
 
 > # **Para staging:** Ver la [guía completa de configuración de HashiCorp Vault](../vault/01-vault-setup-staging.md) con KV v2 mount, políticas y External Secrets Operator.
->
-> **Para staging:** Ver la [guía completa de configuración de HashiCorp Vault](../vault/README.md) con KV v2 mount, políticas y External Secrets Operator.
 
 ### 1. WireGuard config (`vpn-wireguard-config`)
 

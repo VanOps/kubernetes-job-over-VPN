@@ -4,6 +4,7 @@
 #
 # ArgoCD Hook Pattern:
 #   PostSync         → Job runs AFTER ConfigMaps/Secrets/SA/RBAC are synced
+#   BeforeHookCreation → Delete old Job before creating new one (Jobs are immutable)
 #   sync-wave "1"    → Explicit ordering (wave 0 = infra, wave 1 = job)
 #   No delete policy → Jobs persist for audit/debugging
 #
