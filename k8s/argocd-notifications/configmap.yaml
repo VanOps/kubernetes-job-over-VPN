@@ -1,0 +1,152 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# ConfigMap para ArgoCD Notifications
+#
+# Configura servicios (GitHub, Slack) y templates de notificación
+# Apply:
+#   kubectl apply -f k8s/argocd-notifications/configmap.yaml -n argocd
+# ══════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  # ────────────────────────────────────────────────────────────────────
+  # OPCIÓN 1: GitHub App (Recomendado para Producción)
+  # ────────────────────────────────────────────────────────────────────
+  # service.github: |
+  #   appID: $github-app-id
+  #   installationID: $github-app-installation-id
+  #   privateKey: $github-app-private-key
+  #
+  # Requiere secret con: github-app-id, github-app-installation-id, github-app-private-key
+  # Ver: docs/argocd/github-notifications.md sección "GitHub App"
+
+  # ────────────────────────────────────────────────────────────────────
+  # OPCIÓN 2: Personal Access Token (Simple, para Dev/Testing)
+  # ────────────────────────────────────────────────────────────────────
+  service.webhook.github-status: |
+    url: https://api.github.com
+    headers:
+    - name: Authorization
+      value: token $github-token
+  #
+  # Requiere secret con: github-token
+  # Para activar, descomenta la sección OPCIÓN 1 arriba y comenta esta OPCIÓN 2
+
+  # ────────────────────────────────────────────────────────────────────
+  # Template: Sync Status (Progreso)
+  # ────────────────────────────────────────────────────────────────────
+  template.app-sync-status: |
+    webhook:
+      github-status:
+        method: POST
+        path: /repos/{{call .repo.FullNameByRepoURL .app.spec.source.repoURL}}/statuses/{{.app.status.operationState.operation.sync.revision}}
+        body: |
+          {
+            "state": "{{if eq .app.status.operationState.phase "Running"}}pending{{end}}{{if eq .app.status.operationState.phase "Succeeded"}}success{{end}}{{if eq .app.status.operationState.phase "Failed"}}failure{{end}}",
+            "target_url": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+            "description": "ArgoCD sync {{.app.status.operationState.phase}}",
+            "context": "argocd/{{.app.metadata.name}}"
+          }
+
+  # ────────────────────────────────────────────────────────────────────
+  # Template: Deployment Success
+  # ────────────────────────────────────────────────────────────────────
+  template.app-deployed: |
+    message: |
+      ✅ Aplicación {{.app.metadata.name}} desplegada exitosamente
+      📦 Revisión: {{.app.status.sync.revision}}
+      🔗 URL: {{.context.argocdUrl}}/applications/{{.app.metadata.name}}
+    webhook:
+      github-status:
+        method: POST
+        path: /repos/{{call .repo.FullNameByRepoURL .app.spec.source.repoURL}}/statuses/{{.app.status.operationState.operation.sync.revision}}
+        body: |
+          {
+            "state": "success",
+            "target_url": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+            "description": "Application deployed successfully",
+            "context": "argocd/deployment"
+          }
+
+  # ────────────────────────────────────────────────────────────────────
+  # Template: Deployment Failed
+  # ────────────────────────────────────────────────────────────────────
+  template.app-sync-failed: |
+    message: |
+      ❌ Fallo en despliegue de {{.app.metadata.name}}
+      📦 Revisión: {{.app.status.sync.revision}}
+      ⚠️  Error: {{.app.status.operationState.message}}
+    webhook:
+      github-status:
+        method: POST
+        path: /repos/{{call .repo.FullNameByRepoURL .app.spec.source.repoURL}}/statuses/{{.app.status.operationState.operation.sync.revision}}
+        body: |
+          {
+            "state": "failure",
+            "target_url": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+            "description": "Deployment failed: {{.app.status.operationState.message}}",
+            "context": "argocd/deployment"
+          }
+
+  # ────────────────────────────────────────────────────────────────────
+  # Template: Health Degraded
+  # ────────────────────────────────────────────────────────────────────
+  template.app-health-degraded: |
+    webhook:
+      github-status:
+        method: POST
+        path: /repos/{{call .repo.FullNameByRepoURL .app.spec.source.repoURL}}/statuses/{{.app.status.sync.revision}}
+        body: |
+          {
+            "state": "failure",
+            "target_url": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+            "description": "Application health is degraded",
+            "context": "argocd/health"
+          }
+
+  # ────────────────────────────────────────────────────────────────────
+  # Triggers - Define cuándo enviar notificaciones
+  # ────────────────────────────────────────────────────────────────────
+  trigger.on-deployed: |
+    - description: Application is synced and healthy
+      send:
+      - app-deployed
+      when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+
+  trigger.on-sync-failed: |
+    - description: Application syncing has failed
+      send:
+      - app-sync-failed
+      when: app.status.operationState.phase in ['Error', 'Failed']
+
+  trigger.on-sync-running: |
+    - description: Application is being synced
+      send:
+      - app-sync-status
+      when: app.status.operationState.phase in ['Running']
+
+  trigger.on-sync-succeeded: |
+    - description: Application syncing has succeeded
+      send:
+      - app-sync-status
+      when: app.status.operationState.phase in ['Succeeded']
+
+  trigger.on-health-degraded: |
+    - description: Application has degraded
+      send:
+      - app-health-degraded
+      when: app.status.health.status == 'Degraded'
+
+  # ────────────────────────────────────────────────────────────────────
+  # Subscriptions Default (opcional)
+  # ────────────────────────────────────────────────────────────────────
+  subscriptions: |
+    - recipients:
+      - github-status
+      triggers:
+      - on-deployed
+      - on-sync-failed
+      - on-health-degraded

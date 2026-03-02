@@ -20,6 +20,13 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
   annotations:
+    # GitHub Commit Status notifications
+    notifications.argoproj.io/subscribe.on-deployed.github-status: ""
+    notifications.argoproj.io/subscribe.on-sync-failed.github-status: ""
+    notifications.argoproj.io/subscribe.on-sync-running.github-status: ""
+    notifications.argoproj.io/subscribe.on-sync-succeeded.github-status: ""
+    notifications.argoproj.io/subscribe.on-health-degraded.github-status: ""
+    # Slack notifications
     notifications.argoproj.io/subscribe.on-sync-running.slack: devops-prod
     notifications.argoproj.io/subscribe.on-sync-failed.slack: devops-critical
     notifications.argoproj.io/subscribe.on-sync-succeeded.slack: devops-prod
