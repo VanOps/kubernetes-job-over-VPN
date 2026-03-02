@@ -116,8 +116,6 @@ sincronizar correctamente. En dev se crean manualmente; en staging/prod los gest
 ExternalSecrets Operator.
 
 > # **Para staging:** Ver la [guía completa de configuración de HashiCorp Vault](../vault/01-vault-setup-staging.md) con KV v2 mount, políticas y External Secrets Operator.
->
-> **Para staging:** Ver la [guía completa de configuración de HashiCorp Vault](../vault/README.md) con KV v2 mount, políticas y External Secrets Operator.
 
 ### 1. WireGuard config (`vpn-wireguard-config`)
 
@@ -724,7 +722,10 @@ ArgoCD sincronizará automáticamente la nueva configuración.
 
 - **Dev:** Secrets manuales en el clúster (`kubectl create secret`)
 - **Staging:** External Secrets Operator + HashiCorp Vault
-- **Prod:** External Secrets Operator + HashiCorp Vault
+  <<<<<<< HEAD
+- # **Prod:** External Secrets Operator + HashiCorp Vault
+- **Prod:** External Secrets Operator + AWS Secrets Manager
+  > > > > > > > 7153a2c (Staging (#4))
 
 Ver [k8s/external-secrets/](../../k8s/external-secrets/) para la configuración de staging/prod.
 
@@ -898,9 +899,7 @@ kubectl get secrets -n ansible-jobs-dev \
 ### Gestión de Secretos
 
 - [docs/vault/01-vault-setup-staging.md](../vault/01-vault-setup-staging.md) — Configuración completa de HashiCorp Vault para staging
-- # [docs/vault/README.md](../vault/README.md) — Guía rápida de Vault
-
 - [docs/vault/README.md](../vault/README.md) — Guía completa de HashiCorp Vault para staging y prod
 - [docs/aws-secrets-manager/README.md](../aws-secrets-manager/README.md) — Guía de referencia de AWS Secrets Manager (no se usa actualmente)
-  > > > > > > > 3340872 (refactor pro)
+- [docs/vault/README.md](../vault/README.md) — Guía completa de HashiCorp Vault para staging
 - [k8s/external-secrets/](../../k8s/external-secrets/) — Manifests de ExternalSecrets para staging/prod
