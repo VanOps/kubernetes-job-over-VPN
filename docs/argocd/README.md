@@ -895,6 +895,7 @@ kubectl get secrets -n ansible-jobs-dev \
 - [helm/ansible-job/values-dev.yaml](../../helm/ansible-job/values-dev.yaml) — Valores Helm dev
 - [helm/ansible-job/values.yaml](../../helm/ansible-job/values.yaml) — Valores base Helm
 - [docs/helm/01-deploy-helm-lab.md](../helm/01-deploy-helm-lab.md) — Despliegue con Helm directo (sin ArgoCD)
+- [docs/argocd/github-notifications.md](github-notifications.md) — 🆕 Configurar GitHub Commit Status desde ArgoCD
 
 ### Gestión de Secretos
 
