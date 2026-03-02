@@ -18,6 +18,11 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
   annotations:
+    # GitHub Commit Status notifications
+    notifications.argoproj.io/subscribe.on-deployed.github-status: ""
+    notifications.argoproj.io/subscribe.on-sync-failed.github-status: ""
+    notifications.argoproj.io/subscribe.on-sync-running.github-status: ""
+    notifications.argoproj.io/subscribe.on-health-degraded.github-status: ""
     # Slack/Teams notifications (requires ArgoCD Notifications controller)
     notifications.argoproj.io/subscribe.on-sync-failed.slack: devops-alerts
     notifications.argoproj.io/subscribe.on-health-degraded.slack: devops-alerts
@@ -41,7 +46,7 @@ spec:
 
   syncPolicy:
     automated:
-      prune: true # Delete resources removed from Git
+      prune: false # Delete resources removed from Git
       selfHeal: true # Re-sync if cluster state drifts from Git
     syncOptions:
       - CreateNamespace=true

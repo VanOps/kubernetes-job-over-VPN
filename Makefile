@@ -393,6 +393,91 @@ argocd-diff-staging: ## Show ArgoCD diff for staging
 argocd-diff-prod: ## Show ArgoCD diff for prod
 	argocd app diff ansible-job-prod --grpc-web
 
+## ── ArgoCD Notifications ───────────────────────────────────────────────
+
+.PHONY: argocd-notifications-setup
+argocd-notifications-setup: ## Setup ArgoCD Notifications with GitHub (Personal Access Token)
+	@echo "Setting up ArgoCD Notifications..."
+	@echo ""
+	@read -rp "Enter GitHub Personal Access Token (with repo:status scope): " TOKEN && \
+	  kubectl create secret generic argocd-notifications-secret \
+	    --from-literal=github-token=$$TOKEN \
+	    -n argocd --dry-run=client -o yaml | kubectl apply -f -
+	@echo "  ✓ Secret created"
+	@echo ""
+	@echo "Applying notification ConfigMap..."
+	kubectl apply -f k8s/argocd-notifications/configmap.yaml -n argocd
+	@echo "  ✓ ConfigMap applied"
+	@echo ""
+	@echo "Verifying notifications controller..."
+	@kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-notifications-controller 2>/dev/null || \
+	  echo "  ⚠ Notifications controller not found. Install with: make argocd-notifications-install"
+	@echo ""
+	@echo "✓ Setup complete. See docs/argocd/github-notifications.md for details"
+
+.PHONY: argocd-notifications-setup-app
+argocd-notifications-setup-app: ## Setup ArgoCD Notifications with GitHub App (Recommended)
+	@echo "Setting up ArgoCD Notifications with GitHub App..."
+	@echo ""
+	@echo "📋 Required values (see docs/argocd/github-notifications.md for details):"
+	@echo ""
+	@read -rp "Enter GitHub App ID: " APP_ID && \
+	  read -rp "Enter GitHub Installation ID: " INSTALL_ID && \
+	  read -rp "Enter path to private key .pem file: " KEY_PATH && \
+	  if [ ! -f "$$KEY_PATH" ]; then \
+	    echo "  ✗ Private key file not found: $$KEY_PATH"; \
+	    exit 1; \
+	  fi; \
+	  PRIVATE_KEY=$$(cat "$$KEY_PATH") && \
+	  kubectl create secret generic argocd-notifications-secret \
+	    --from-literal=github-app-id=$$APP_ID \
+	    --from-literal=github-app-installation-id=$$INSTALL_ID \
+	    --from-literal=github-app-private-key="$$PRIVATE_KEY" \
+	    -n argocd --dry-run=client -o yaml | kubectl apply -f -
+	@echo "  ✓ Secret created with GitHub App credentials"
+	@echo ""
+	@echo "📝 Now update k8s/argocd-notifications/configmap.yaml:"
+	@echo "   - Uncomment OPCIÓN 1 (GitHub App)"
+	@echo "   - Comment OPCIÓN 2 (Personal Access Token)"
+	@echo ""
+	@read -rp "Press Enter to apply ConfigMap (or Ctrl+C to edit manually first)..."
+	kubectl apply -f k8s/argocd-notifications/configmap.yaml -n argocd
+	@echo "  ✓ ConfigMap applied"
+	@echo ""
+	@echo "✓ Setup complete. Verify with: make argocd-notifications-logs"
+
+.PHONY: argocd-notifications-install
+argocd-notifications-install: ## Install ArgoCD Notifications controller
+	@echo "Installing ArgoCD Notifications controller..."
+	kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj-labs/argocd-notifications/release-1.0/manifests/install.yaml
+	@echo ""
+	@echo "Waiting for controller to be ready..."
+	kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-notifications-controller -n argocd --timeout=120s
+	@echo "✓ Notifications controller installed"
+
+.PHONY: argocd-notifications-logs
+argocd-notifications-logs: ## View ArgoCD Notifications controller logs
+	kubectl logs -n argocd -l app.kubernetes.io/name=argocd-notifications-controller -f
+
+.PHONY: argocd-notifications-test
+argocd-notifications-test: ## Test GitHub token configuration
+	@echo "Testing GitHub token..."
+	@TOKEN=$$(kubectl get secret argocd-notifications-secret -n argocd -o jsonpath='{.data.github-token}' | base64 -d 2>/dev/null); \
+	if [ -z "$$TOKEN" ]; then \
+	  echo "  ⚠ Secret not found. Run: make argocd-notifications-setup"; \
+	  exit 1; \
+	fi; \
+	response=$$(curl -s -w "\n%{http_code}" -H "Authorization: token $$TOKEN" https://api.github.com/user); \
+	status=$$(echo "$$response" | tail -n1); \
+	body=$$(echo "$$response" | head -n-1); \
+	if [ "$$status" = "200" ]; then \
+	  echo "  ✓ GitHub token is valid"; \
+	  echo "  User: $$(echo "$$body" | grep -o '"login":"[^"]*"' | cut -d'"' -f4)"; \
+	else \
+	  echo "  ✗ GitHub token is invalid (HTTP $$status)"; \
+	  exit 1; \
+	fi
+
 ## ── CI / Quality ───────────────────────────────────────────────────────
 
 .PHONY: ci
