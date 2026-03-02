@@ -393,6 +393,47 @@ argocd-diff-staging: ## Show ArgoCD diff for staging
 argocd-diff-prod: ## Show ArgoCD diff for prod
 	argocd app diff ansible-job-prod --grpc-web
 
+## ── ArgoCD – Feature PR Namespaces ────────────────────────────────────
+# Uso: make pr-ns-setup PR=42
+#      make pr-ns-cleanup PR=42
+
+PR ?= 0
+
+.PHONY: pr-ns-setup
+pr-ns-setup: ## Crear namespace de PR y copiar secrets desde dev (PR=<número>)
+	@test "$(PR)" != "0" || (echo "ERROR: Indica el número de PR. Ej: make pr-ns-setup PR=42"; exit 1)
+	@echo "--- Setting up PR namespace ansible-jobs-pr-$(PR) ---"
+	kubectl create namespace ansible-jobs-pr-$(PR) --dry-run=client -o yaml | kubectl apply -f -
+	@for SECRET in vpn-wireguard-config ansible-vault-password ansible-ssh-key; do \
+	  echo "  Copying $$SECRET ..."; \
+	  kubectl get secret $$SECRET -n ansible-jobs-dev -o json \
+	    | jq 'del(.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp,.metadata.annotations,.metadata.ownerReferences,.metadata.managedFields)' \
+	    | jq --arg ns "ansible-jobs-pr-$(PR)" '.metadata.namespace=$$ns' \
+	    | kubectl apply -f -; \
+	done
+	@if kubectl get secret ghcr-pull-secret -n ansible-jobs-dev &>/dev/null; then \
+	  echo "  Copying ghcr-pull-secret ..."; \
+	  kubectl get secret ghcr-pull-secret -n ansible-jobs-dev -o json \
+	    | jq 'del(.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp,.metadata.annotations,.metadata.ownerReferences,.metadata.managedFields)' \
+	    | jq --arg ns "ansible-jobs-pr-$(PR)" '.metadata.namespace=$$ns' \
+	    | kubectl apply -f -; \
+	fi
+	@echo "Namespace ansible-jobs-pr-$(PR) ready ✓"
+
+.PHONY: pr-ns-cleanup
+pr-ns-cleanup: ## Borrar namespace de PR y resincroni­zar dev (PR=<número>)
+	@test "$(PR)" != "0" || (echo "ERROR: Indica el número de PR. Ej: make pr-ns-cleanup PR=42"; exit 1)
+	@echo "--- Cleaning up PR namespace ansible-jobs-pr-$(PR) ---"
+	kubectl delete namespace ansible-jobs-pr-$(PR) --wait=false --ignore-not-found
+	@echo "Triggering dev resync..."
+	argocd app sync ansible-job-dev --grpc-web
+	@echo "Cleanup complete ✓"
+
+.PHONY: pr-status
+pr-status: ## Listar todas las Applications de PR en ArgoCD
+	argocd app list -l app.kubernetes.io/part-of=ansible-gitops --grpc-web \
+	  | grep -E "(NAME|pr-)" || echo "No hay Applications de PR activas."
+
 ## ── ArgoCD Notifications ───────────────────────────────────────────────
 
 .PHONY: argocd-notifications-setup

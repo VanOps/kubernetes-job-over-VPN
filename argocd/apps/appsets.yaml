@@ -1,0 +1,54 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# ArgoCD Application — ApplicationSets Manager
+#
+# Gestiona el directorio argocd/appsets/ que contiene los
+# ApplicationSets del proyecto (actualmente: feature-pr.yaml).
+#
+# Bootstrap automático:
+#   El app-of-apps (argocd/app-of-apps.yaml) observa argocd/apps/
+#   en la rama main. Al hacer merge de este fichero a main, el
+#   app-of-apps crea esta Application en el siguiente sync.
+#   No se requiere ningún kubectl apply manual.
+#
+# Cadena completa:
+#   ansible-gitops (app-of-apps)
+#     └── ansible-gitops-appsets   ← este fichero
+#           └── ansible-job-feature-prs  (ApplicationSet)
+#                 └── ansible-job-pr-{N} (Application por cada PR)
+# ══════════════════════════════════════════════════════════════════════
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ansible-gitops-appsets
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: ansible-gitops
+    app.kubernetes.io/component: applicationsets
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/VanOps/kubernetes-job-over-VPN
+    targetRevision: main
+    path: argocd/appsets
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true      # Elimina ApplicationSets obsoletos de Git
+      selfHeal: true   # Reconcilia si el estado del cluster deriva
+    syncOptions:
+      - CreateNamespace=false   # El namespace argocd ya existe
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 2m
+        factor: 2

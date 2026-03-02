@@ -1,0 +1,140 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# ArgoCD ApplicationSet — Feature PRs → Dev
+#
+# Crea automáticamente una Application `ansible-job-pr-{N}` por cada
+# PR abierta de `feature/**` apuntando a `develop`.
+#
+# Cada PR obtiene:
+#   - Namespace aislado: ansible-jobs-pr-{N}
+#   - Job Ansible apuntando al branch de la feature (gitSync.branch)
+#   - Commit status en GitHub vía ArgoCD Notifications
+#
+# Pre-requisito de secrets:
+#   Los secrets (vpn-wireguard-config, ansible-vault-password,
+#   ansible-ssh-key) deben existir en ansible-jobs-pr-{N} antes del
+#   primer sync exitoso. El workflow .github/workflows/pr-feature-deploy.yaml
+#   los copia desde ansible-jobs-dev al abrir la PR.
+#   retry.limit: 5 cubre la ventana de race condition (~60s).
+#
+# Bootstrap:
+#   Este ApplicationSet es gestionado por la Application
+#   ansible-gitops-appsets (argocd/apps/appsets.yaml), que a su vez
+#   es creada por el app-of-apps existente (argocd/app-of-apps.yaml).
+#   No requiere kubectl apply manual.
+# ══════════════════════════════════════════════════════════════════════
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: ansible-job-feature-prs
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: ansible-gitops
+    app.kubernetes.io/component: feature-pr-deployments
+spec:
+  # ── PR Generator ───────────────────────────────────────────────────
+  # Detecta PRs abiertas de feature/** → develop y genera una
+  # Application por cada una. Al cerrar la PR la Application se elimina.
+  generators:
+    - pullRequest:
+        github:
+          owner: VanOps
+          repo: kubernetes-job-over-VPN
+          # Reutiliza el token del Notifications Controller
+          tokenRef:
+            secretName: argocd-notifications-secret
+            key: github-token
+        # Frecuencia de polling (segundos). No hay webhook support en
+        # el PR Generator, por lo que el sync se detecta vía polling.
+        requeueAfterSeconds: 180
+        filters:
+          # Solo PRs cuyo head branch es feature/...
+          - branchMatch: "^feature/.*"
+          # Solo PRs que apuntan a develop
+          - targetBranchMatch: "^develop$"
+
+  # ── Template de Application por PR ────────────────────────────────
+  # Variables disponibles del PR Generator:
+  #   {{number}}        → número de PR (ej. 42)
+  #   {{branch}}        → nombre del head branch (ej. feature/my-task)
+  #   {{branch_slug}}   → branch con / reemplazado por - (URL-safe)
+  #   {{head_sha}}      → commit SHA del head de la PR
+  #   {{head_short_sha}} → 8 caracteres del SHA
+  #   {{base_branch}}   → rama destino (develop)
+  template:
+    metadata:
+      name: "ansible-job-pr-{{number}}"
+      namespace: argocd
+      labels:
+        app.kubernetes.io/part-of: ansible-gitops
+        environment: dev
+        pr-number: "{{number}}"
+      annotations:
+        # GitHub Commit Status — mismo patrón que ansible-job-dev
+        notifications.argoproj.io/subscribe.on-deployed.github-status: ""
+        notifications.argoproj.io/subscribe.on-sync-failed.github-status: ""
+        notifications.argoproj.io/subscribe.on-sync-running.github-status: ""
+        notifications.argoproj.io/subscribe.on-health-degraded.github-status: ""
+      # Cascade-delete de todos los recursos K8s al eliminar la Application
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+
+    spec:
+      project: default
+
+      source:
+        repoURL: https://github.com/VanOps/kubernetes-job-over-VPN
+        # Pinamos al SHA exacto del commit del PR para que el commit
+        # status se asocie al commit correcto en GitHub.
+        # Cuando hay un nuevo push, el generator detecta el nuevo
+        # head_sha y ArgoCD actualiza + re-sincroniza automáticamente.
+        targetRevision: "{{head_sha}}"
+        path: helm/ansible-job
+        helm:
+          releaseName: "ansible-job-pr-{{number}}"
+          valueFiles:
+            - values.yaml
+            - values-dev.yaml   # Reutiliza toda la config de dev
+          parameters:
+            # Override del branch para git-sync (values-dev.yaml fija "develop")
+            - name: gitSync.branch
+              value: "{{branch}}"
+            # Tag de entorno para labels/annotations del Job
+            - name: environment
+              value: "pr-{{number}}"
+            # TTL 1h — limpieza automática de pods completados
+            - name: job.ttlSecondsAfterFinished
+              value: "3600"
+
+      destination:
+        server: https://kubernetes.default.svc
+        # Namespace aislado por número de PR
+        namespace: "ansible-jobs-pr-{{number}}"
+
+      syncPolicy:
+        automated:
+          prune: true       # Elimina recursos obsoletos
+          selfHeal: true    # Re-sincroniza si el cluster deriva de Git
+        syncOptions:
+          - CreateNamespace=true          # Crea el namespace si no existe
+          - Replace=true                  # Fuerza recreación de Jobs inmutables
+          - ServerSideApply=true
+          - ApplyOutOfSyncOnly=true
+        retry:
+          # retry.limit: 5 cubre la ventana donde los secrets aún no
+          # han sido copiados por el workflow de GH Actions (~60s).
+          # Backoff: 30s → 60s → 120s → 240s → 480s
+          limit: 5
+          backoff:
+            duration: 30s
+            maxDuration: 5m
+            factor: 2
+
+      # Igual que en dev.yaml — ignora campos inmutables del Job
+      ignoreDifferences:
+        - group: batch
+          kind: Job
+          jsonPointers:
+            - /spec/selector
+            - /spec/template/metadata/labels/controller-uid
+            - /spec/template/metadata/labels/batch.kubernetes.io/controller-uid

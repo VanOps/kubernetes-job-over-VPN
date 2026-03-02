@@ -1,0 +1,209 @@
+---
+# ══════════════════════════════════════════════════════════════════════
+# Workflow: Feature PR — Namespace Setup & Cleanup
+#
+# Triggers:
+#   - pull_request hacia develop:
+#       opened     → crea namespace + copia secrets desde ansible-jobs-dev
+#       synchronize → re-copia secrets (idempotente) para nuevos commits
+#       reopened   → recrea namespace + secrets si fue cerrada y reabierta
+#       closed     → borra namespace + resincroniza ansible-job-dev
+#
+# Responsabilidades:
+#   Este workflow NO despliega directamente. El despliegue lo hace
+#   ArgoCD via ApplicationSet (argocd/appsets/feature-pr.yaml).
+#   Este workflow solo garantiza que los secrets necesarios existan en
+#   ansible-jobs-pr-{N} antes de que ArgoCD intente el sync.
+#
+# Secrets de GitHub Actions requeridos:
+#   KUBE_CONFIG       → kubeconfig en base64 (acceso al cluster)
+#   ARGOCD_SERVER     → URL del servidor ArgoCD (ej. argocd.example.com)
+#   ARGOCD_AUTH_TOKEN → Token de autenticación ArgoCD
+#
+# Flujo completo:
+#   PR opened → [este workflow] crea ns + copia secrets
+#             → [ArgoCD ApplicationSet] detecta PR, crea Application
+#             → ArgoCD sync (retry hasta que secrets estén disponibles)
+#             → ArgoCD Notifications reporta commit status en GitHub
+#   PR closed → [este workflow] borra ns + resincroniza dev
+#             → [ArgoCD ApplicationSet] elimina Application automáticamente
+# ══════════════════════════════════════════════════════════════════════
+name: Feature PR — Namespace Setup & Cleanup
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - develop
+
+concurrency:
+  # Un solo job por PR a la vez para evitar condiciones de carrera
+  group: pr-deploy-${{ github.event.number }}
+  cancel-in-progress: false  # No cancelar — dejar que termine la copia de secrets
+
+jobs:
+  # ── Setup: crea namespace y copia secrets ──────────────────────────
+  setup-pr-namespace:
+    name: Setup PR namespace
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      PR_NAMESPACE: ansible-jobs-pr-${{ github.event.number }}
+      SOURCE_NAMESPACE: ansible-jobs-dev
+
+    steps:
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Create PR namespace
+        run: |
+          kubectl create namespace "$PR_NAMESPACE" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          echo "Namespace $PR_NAMESPACE ready."
+
+      - name: Copy secrets from dev namespace
+        run: |
+          SECRETS="vpn-wireguard-config ansible-vault-password ansible-ssh-key"
+
+          for SECRET in $SECRETS; do
+            echo "→ Copying secret: $SECRET"
+            kubectl get secret "$SECRET" \
+              -n "$SOURCE_NAMESPACE" \
+              -o json \
+            | jq 'del(
+                .metadata.resourceVersion,
+                .metadata.uid,
+                .metadata.creationTimestamp,
+                .metadata.annotations,
+                .metadata.ownerReferences,
+                .metadata.managedFields
+              )' \
+            | jq --arg ns "$PR_NAMESPACE" '.metadata.namespace = $ns' \
+            | kubectl apply -f -
+          done
+
+          # Copia ghcr-pull-secret si existe (ignorar si no existe)
+          if kubectl get secret ghcr-pull-secret -n "$SOURCE_NAMESPACE" &>/dev/null; then
+            echo "→ Copying secret: ghcr-pull-secret"
+            kubectl get secret ghcr-pull-secret \
+              -n "$SOURCE_NAMESPACE" \
+              -o json \
+            | jq 'del(
+                .metadata.resourceVersion,
+                .metadata.uid,
+                .metadata.creationTimestamp,
+                .metadata.annotations,
+                .metadata.ownerReferences,
+                .metadata.managedFields
+              )' \
+            | jq --arg ns "$PR_NAMESPACE" '.metadata.namespace = $ns' \
+            | kubectl apply -f -
+          fi
+
+          echo "All secrets copied."
+
+      - name: Verify secrets in PR namespace
+        run: |
+          echo "Secrets in $PR_NAMESPACE:"
+          kubectl get secrets -n "$PR_NAMESPACE" \
+            --no-headers -o custom-columns="NAME:.metadata.name,TYPE:.type"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Feature PR Namespace Setup" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field       | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| PR          | #${{ github.event.number }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch      | \`${{ github.head_ref }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Namespace   | \`$PR_NAMESPACE\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commit SHA  | \`${{ github.event.pull_request.head.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action      | ${{ github.event.action }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "ArgoCD Application: \`ansible-job-pr-${{ github.event.number }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> ArgoCD detectará la PR en ≤3 min y desplegará automáticamente." >> "$GITHUB_STEP_SUMMARY"
+          echo "> El commit status aparecerá en el PR una vez que ArgoCD sincronice." >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Cleanup: borra namespace y resincroniza dev ────────────────────
+  cleanup-pr:
+    name: Cleanup PR namespace
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      PR_NAMESPACE: ansible-jobs-pr-${{ github.event.number }}
+
+    steps:
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Delete PR namespace
+        run: |
+          echo "Deleting namespace: $PR_NAMESPACE"
+          # --wait=false → no espera a que los pods terminen
+          # --ignore-not-found → no falla si ya fue borrado
+          kubectl delete namespace "$PR_NAMESPACE" \
+            --wait=false \
+            --ignore-not-found
+          echo "Namespace deletion requested."
+
+      - name: Install argocd CLI
+        run: |
+          curl -sSL -o /usr/local/bin/argocd \
+            https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /usr/local/bin/argocd
+
+      - name: Resync dev (ansible-job-dev → develop)
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          # selfHeal: true en dev garantiza el resync automático,
+          # pero lo forzamos aquí para visibilidad inmediata post-merge.
+          argocd app sync ansible-job-dev \
+            --server "$ARGOCD_SERVER" \
+            --auth-token "$ARGOCD_AUTH_TOKEN" \
+            --grpc-web \
+            --timeout 120 \
+            || echo "Sync triggered (puede estar ya en progreso)"
+
+      - name: Summary
+        if: always()
+        run: |
+          MERGED="${{ github.event.pull_request.merged }}"
+          ACTION_LABEL="Cerrada sin merge"
+          if [ "$MERGED" = "true" ]; then
+            ACTION_LABEL="Mergeada a develop"
+          fi
+
+          echo "## Feature PR Namespace Cleanup" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field     | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| PR        | #${{ github.event.number }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch    | \`${{ github.head_ref }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Estado PR | $ACTION_LABEL |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Namespace | \`$PR_NAMESPACE\` → **eliminado** |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$MERGED" = "true" ]; then
+            echo "✅ Dev resincronizado con la nueva versión de \`develop\`." >> "$GITHUB_STEP_SUMMARY"
+          fi
